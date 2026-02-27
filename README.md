@@ -11,9 +11,6 @@ NPC Sink is a project designed to provide a seamless experience for managing Non
 ## Getting Started
 To get started with using NPC Sink, clone the repository and follow the setup instructions provided in the documentation.
 
-## Contributing
-We welcome contributions! Please check the guidelines for contributing before making a pull request.
-
 ## License
 This project is licensed under the MIT License - see the LICENSE file for details.
 
