@@ -104,6 +104,18 @@ local function buildTown(townId, raw)
 		})
 	end
 
+	local hotspots = {}
+	if raw.hotspots then
+		for _, inst in ipairs(raw.hotspots) do
+			table.insert(hotspots, {
+				name = inst.Name,
+				pos = inst.Position,
+				type = inst:GetAttribute("Type") or "Generic",
+				inst = inst,
+			})
+		end
+	end
+
 	local popCap = Config.MaxAgentsPerTownDefault
 	if raw.zoneParts[1] then
 		local zcap = raw.zoneParts[1]:GetAttribute("PopulationCap")
@@ -121,6 +133,7 @@ local function buildTown(townId, raw)
 
 		agents = {},
 		rng = Random.new(math.random(1, 2^30)),
+		hotspots = hotspots,
 	}
 end
 
@@ -159,6 +172,11 @@ function TownLife.Start()
 		end
 	end
 
+	town._agentById = {}
+		for _, agent in ipairs(town.agents) do
+			town._agentById[agent.id] = agent
+	end
+
 	-- Main loop with budgets
 	local accum = 0
 	local nearTick = 1 / Config.SimHzNear
@@ -179,6 +197,7 @@ function TownLife.Start()
 		end
 
 		local focusPos = getFocusPos()
+		EventSim.updateTown(town, Config, now, focusPos)
 
 		-- Render selection + sim
 		for _, town in ipairs(towns) do
