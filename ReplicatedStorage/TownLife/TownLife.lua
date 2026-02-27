@@ -6,6 +6,7 @@ local Config = require(script.Parent.Config)
 local Graph = require(script.Parent.Graph)
 local AgentSim = require(script.Parent.AgentSim)
 local Renderer = require(script.Parent.Renderer)
+local EventSim = require(script.Parent.EventSim)
 
 local TownLife = {}
 
@@ -40,6 +41,14 @@ end
 local function scanTowns()
 	-- returns townsById[townId] = { zoneParts={}, roadNodes={}, pois={} }
 	local townsById = {}
+	
+	for _, hs in ipairs(CollectionService:GetTagged("Hotspot")) do
+		local id = getTownId(hs)
+		if typeof(id) == "string" and id ~= "" then
+			townsById[id] = townsById[id] or { zoneParts = {}, roadNodes = {}, pois = {}, hotspots = {} }
+			table.insert(townsById[id].hotspots, hs)
+		end
+	end
 
 	for _, zone in ipairs(CollectionService:GetTagged("TownZone")) do
 		local id = getTownId(zone)
