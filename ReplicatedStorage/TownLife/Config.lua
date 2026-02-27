@@ -24,4 +24,20 @@ Config.POIIdleMultiplier = 1.6      -- idle longer at POIs
 -- Debug
 Config.DebugDraw = false            -- prints + optional gizmos later
 
+-- Meetups / hotspots
+Config.MeetupsEnabled = true
+Config.MaxActiveMeetupsPerTown = 2
+
+Config.MeetupSpawnRadius = 180          -- only spawn meetups near the player/camera
+Config.MeetupGroupSizeRange = {3, 6}
+Config.MeetupDurationRange = {7, 14}    -- seconds
+Config.MeetupCooldownRange = {8, 18}    -- seconds between meetup spawns (per town)
+
+Config.MeetupArriveRadius = 2.5         -- studs
+Config.MeetupCircleRadius = 4.0         -- studs (ring around hotspot)
+Config.MeetupCircleJitter = 0.6         -- random offset to avoid perfect symmetry
+
+Config.HotspotDefaultCapacity = 6
+Config.HotspotDefaultRadius = 10
+
 return Config

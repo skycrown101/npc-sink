@@ -67,6 +67,56 @@ function AgentSim.stepAgent(agent, town, config, rng, dt, now, isNear)
 		end
 		return
 	end
+		-- Meetup: walking to assigned slot
+	if agent.state == "MeetupGo" and agent.meetup then
+		local target = agent.meetup.slotPos
+		local to = target - agent.pos
+		local dist = to.Magnitude
+
+		if dist <= config.MeetupArriveRadius then
+			agent.pos = Vector3.new(target.X, agent.pos.Y, target.Z)
+			agent.state = "MeetupIdle"
+			agent.idleUntil = agent.meetup.endAt
+			return
+		end
+
+		local dir = to / dist
+		agent.pos += dir * speed * dt
+
+		-- yaw toward movement
+		local desiredYaw = math.atan2(-dir.Z, dir.X)
+		local dy = (desiredYaw - agent.yaw)
+		dy = (dy + math.pi) % (2 * math.pi) - math.pi
+		local maxTurn = config.TurnSpeed * dt
+		if dy > maxTurn then dy = maxTurn end
+		if dy < -maxTurn then dy = -maxTurn end
+		agent.yaw += dy
+		return
+	end
+
+	-- Meetup: idling in circle (face center)
+	if agent.state == "MeetupIdle" and agent.meetup then
+		if now >= agent.idleUntil then
+			agent.meetup = nil
+			agent.state = "Walk"
+			agent.targetPos = nil
+			return
+		end
+
+		local toC = agent.meetup.center - agent.pos
+		toC = Vector3.new(toC.X, 0, toC.Z)
+		if toC.Magnitude > 0.001 then
+			local dir = toC.Unit
+			local desiredYaw = math.atan2(-dir.Z, dir.X)
+			local dy = (desiredYaw - agent.yaw)
+			dy = (dy + math.pi) % (2 * math.pi) - math.pi
+			local maxTurn = config.TurnSpeed * dt
+			if dy > maxTurn then dy = maxTurn end
+			if dy < -maxTurn then dy = -maxTurn end
+			agent.yaw += dy
+		end
+		return
+	end
 
 	-- Walk toward target
 	local to = agent.targetPos - agent.pos
