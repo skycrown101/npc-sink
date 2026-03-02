@@ -7,6 +7,7 @@ local Graph = require(script.Parent.Graph)
 local AgentSim = require(script.Parent.AgentSim)
 local Renderer = require(script.Parent.Renderer)
 local EventSim = require(script.Parent.EventSim)
+local Dialogue = require(script.Parent.Dialogue)
 
 local TownLife = {}
 
@@ -143,6 +144,7 @@ function TownLife.Start()
 
 	local root = getOrCreateRoot()
 	local renderer = Renderer.new(root, Config)
+	Dialogue.EnsureBubbleChat(Config)
 
 	local townsById = scanTowns()
 	local towns = {}
@@ -236,6 +238,8 @@ function TownLife.Start()
 						AgentSim.stepAgent(agent, town, Config, town.rng, nearTick, now, true)
 					end
 					renderer:updateAgentVisual(agent, dt, now)
+					local model = renderer.active[agent.id]
+					Dialogue.MaybeSpeak(Config, town.rng, agent, model, now)
 				else
 					-- data-only far sim at low rate
 					if doFar then
