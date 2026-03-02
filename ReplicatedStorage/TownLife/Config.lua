@@ -40,4 +40,14 @@ Config.MeetupCircleJitter = 0.6         -- random offset to avoid perfect symmet
 Config.HotspotDefaultCapacity = 6
 Config.HotspotDefaultRadius = 10
 
+-- Dialogue / bubbles
+Config.DialogueEnabled = true
+Config.DialogueMeetupOnly = true
+Config.DialogueAdorneePartName = "Head"
+
+Config.DialogueTalkChance = 0.65
+Config.DialogueTalkIntervalRange = {2.0, 4.5}  -- seconds
+
+Config.AutoEnableBubbleChat = false 
+
 return Config
