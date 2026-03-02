@@ -50,4 +50,11 @@ Config.DialogueTalkIntervalRange = {2.0, 4.5}  -- seconds
 
 Config.AutoEnableBubbleChat = false 
 
+-- Meetup dialogue behavior
+Config.MeetupTalkEnabled = true
+Config.MeetupLinesPerMeetupRange = {2, 5}
+Config.MeetupSpeakerLineIntervalRange = {1.8, 3.2}
+Config.MeetupReactionChance = 0.55
+Config.MeetupReactionDelayRange = {0.25, 0.9}
+
 return Config
