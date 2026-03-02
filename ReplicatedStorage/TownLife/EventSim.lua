@@ -194,6 +194,10 @@ function EventSim.trySpawnMeetup(town, config, now, focusPos)
 		agent.meetup.endAt = now + duration
 		agent.meetup.eventId = eventId
 	end
+	-- Pick a speaker + line budget for this meetup
+local speaker = agents[town.rng:NextInteger(1, #agents)]
+local linesLeft = town.rng:NextInteger(config.MeetupLinesPerMeetupRange[1], config.MeetupLinesPerMeetupRange[2])
+local nextLineAt = now + town.rng:NextNumber() -- small random offset
 
 	table.insert(town._events, {
 		id = eventId,
