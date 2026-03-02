@@ -24,6 +24,7 @@ function AgentSim.newAgent(id, townId, startNodeIndex, startPos, rng)
 
 		-- visuals
 		appearanceSeed = rng:NextInteger(1, 2^30),
+		nextTalkAt = 0,
 	}
 end
 
