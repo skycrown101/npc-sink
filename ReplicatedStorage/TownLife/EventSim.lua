@@ -199,14 +199,20 @@ local speaker = agents[town.rng:NextInteger(1, #agents)]
 local linesLeft = town.rng:NextInteger(config.MeetupLinesPerMeetupRange[1], config.MeetupLinesPerMeetupRange[2])
 local nextLineAt = now + town.rng:NextNumber() -- small random offset
 
-	table.insert(town._events, {
-		id = eventId,
-		type = "Meetup",
-		hotspot = hotspot,
-		participants = participants,
-		startAt = now,
-		endAt = now + duration,
-	})
+table.insert(town._events, {
+	id = eventId,
+	type = "Meetup",
+	hotspot = hotspot,
+	participants = participants,
+	startAt = now,
+	endAt = now + duration,
+
+	-- dialogue controls
+	speakerId = speaker.id,
+	linesLeft = linesLeft,
+	nextLineAt = nextLineAt,
+	pending = {}, -- queued listener reactions: {id=agentId, at=time, text=string}
+})
 
 	town._nextMeetupAt = now + randRange(town.rng, config.MeetupCooldownRange[1], config.MeetupCooldownRange[2])
 end
