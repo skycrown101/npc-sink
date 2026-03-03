@@ -103,6 +103,41 @@ local function buildTown(townId, raw)
 
 	local graph = Graph.build(nodes, Config)
 
+	local function findNearestNodeIndex(graph, pos)
+	local bestI, bestD = 1, math.huge
+	for i, n in ipairs(graph.nodes) do
+		local d = (n.pos - pos).Magnitude
+			if d < bestD then
+				bestD, bestI = d, i
+			end
+		end
+		return bestI
+	end
+
+	local gates = {}
+	if raw.spawnGates then
+		for _, inst in ipairs(raw.spawnGates) do
+			local weight = inst:GetAttribute("Weight")
+			if typeof(weight) ~= "number" or weight <= 0 then weight = 1 end
+	
+			local nodeName = inst:GetAttribute("Node")
+			local nodeIndex
+			if typeof(nodeName) == "string" and nodeName ~= "" and graph.byName[nodeName] then
+				nodeIndex = graph.byName[nodeName]
+			else
+				nodeIndex = findNearestNodeIndex(graph, inst.Position)
+			end
+	
+			table.insert(gates, {
+				name = inst.Name,
+				pos = inst.Position,
+				weight = weight,
+				nodeIndex = nodeIndex,
+				inst = inst,
+			})
+		end
+	end
+
 	local pois = {}
 	for _, inst in ipairs(raw.pois) do
 		table.insert(pois, {
@@ -143,6 +178,7 @@ local function buildTown(townId, raw)
 		agents = {},
 		rng = Random.new(math.random(1, 2^30)),
 		hotspots = hotspots,
+		spawnGates = gates,
 	}
 end
 
