@@ -163,62 +163,74 @@ function TownLife.Start()
 
 	-- Spawn agent data (no visuals yet)
 	local nextAgentId = 1
+	
 	for _, town in ipairs(towns) do
+		town._agentById = {}
+	
 		for i = 1, town.popCap do
 			local startNode = town.rng:NextInteger(1, #town.graph.nodes)
 			local startPos = town.graph.nodes[startNode].pos
+	
 			local agent = AgentSim.newAgent(nextAgentId, town.id, startNode, startPos, town.rng)
 			AgentSim.ensureTarget(agent, town, Config, town.rng, os.clock())
+	
 			table.insert(town.agents, agent)
+			town._agentById[agent.id] = agent
+	
 			nextAgentId += 1
 		end
-	end
+	endend
 
 	town._agentById = {}
 		for _, agent in ipairs(town.agents) do
 			town._agentById[agent.id] = agent
 	end
 
-	-- Main loop with budgets
-	local accum = 0
+	-- Disconnect any previous loop (important if Start/Stop used)
+	if TownLife._conn then
+		TownLife._conn:Disconnect()
+		TownLife._conn = nil
+	end
+		
+	local accumNear, accumFar = 0, 0
 	local nearTick = 1 / Config.SimHzNear
 	local farTick = 1 / Config.SimHzFar
 
-	RunService.RenderStepped:Connect(function(dt)
+	TownLife._conn = RunService.RenderStepped:Connect(function(dt)
 		if not TownLife._running then return end
-		accum += dt
+	
+		accumNear += dt
+		accumFar += dt
+	
 		local now = os.clock()
-
-		-- Decide which tick to run (cheap): we can run near steps frequently, far less frequently
-		local doNear = accum >= nearTick
-		local doFar = accum >= farTick
-
-		if doNear then
-			-- keep accum from growing without bound
-			accum = 0
-		end
-
+		local doNear = accumNear >= nearTick
+		local doFar = accumFar >= farTick
+		if doNear then accumNear -= nearTick end
+		if doFar then accumFar -= farTick end
+	
 		local focusPos = getFocusPos()
-		EventSim.updateTown(town, Config, now, focusPos)
-
-		-- Render selection + sim
+	
 		for _, town in ipairs(towns) do
-			-- Pick a candidate list of agents near enough to render
+			-- Update events (meetups) per town
+			if doNear then
+				EventSim.updateTown(town, Config, now, focusPos)
+			end
+	
+			-- Pick visible agents (closest first)
 			local candidates = {}
 			for _, agent in ipairs(town.agents) do
 				local d = (agent.pos - focusPos).Magnitude
 				if d <= Config.VisibleDistance then
-					table.insert(candidates, {agent=agent, d=d})
+					table.insert(candidates, {agent = agent, d = d})
 				end
 			end
-			table.sort(candidates, function(a,b) return a.d < b.d end)
-
-			-- Mark who should be visible (up to cap, global cap enforced by renderer)
+			table.sort(candidates, function(a, b) return a.d < b.d end)
+	
 			local shouldBeVisible = {}
 			for i = 1, math.min(#candidates, Config.MaxVisibleNPCs) do
 				shouldBeVisible[candidates[i].agent.id] = true
 			end
-
+	
 			-- Acquire/release models
 			for _, agent in ipairs(town.agents) do
 				if shouldBeVisible[agent.id] then
@@ -227,21 +239,23 @@ function TownLife.Start()
 					renderer:releaseAgent(agent.id)
 				end
 			end
-
-			-- Step sim: near agents frequently, far agents occasionally
+	
+			-- Contextual meetup dialogue (speaker + reactions)
+			if doNear then
+				Dialogue.StepTown(town, Config, renderer, now)
+			end
+	
+			-- Sim step
 			for _, agent in ipairs(town.agents) do
 				local d = (agent.pos - focusPos).Magnitude
 				local isNear = d <= Config.VisibleDistance
-
+	
 				if isNear then
 					if doNear then
 						AgentSim.stepAgent(agent, town, Config, town.rng, nearTick, now, true)
 					end
 					renderer:updateAgentVisual(agent, dt, now)
-					local model = renderer.active[agent.id]
-					Dialogue.MaybeSpeak(Config, town.rng, agent, model, now)
 				else
-					-- data-only far sim at low rate
 					if doFar then
 						AgentSim.stepAgent(agent, town, Config, town.rng, farTick, now, false)
 					end
@@ -255,6 +269,10 @@ function TownLife.Stop()
 	TownLife._running = false
 	-- visuals cleanup: nukes the root folder
 	local root = workspace:FindFirstChild("__TownLife")
+	if TownLife._conn then
+		TownLife._conn:Disconnect()
+		TownLife._conn = nil
+	end
 	if root then root:Destroy() end
 end
 
