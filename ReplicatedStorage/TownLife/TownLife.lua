@@ -75,6 +75,14 @@ local function scanTowns()
 		end
 	end
 
+	for _, gate in ipairs(CollectionService:GetTagged("SpawnGate")) do
+	local id = getTownId(gate)
+	if typeof(id) == "string" and id ~= "" then
+		townsById[id] = townsById[id] or { zoneParts = {}, roadNodes = {}, pois = {}, hotspots = {}, spawnGates = {} }
+		table.insert(townsById[id].spawnGates, gate)
+		end
+	end
+
 	return townsById
 end
 
