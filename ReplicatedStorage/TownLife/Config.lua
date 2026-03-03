@@ -57,4 +57,15 @@ Config.MeetupSpeakerLineIntervalRange = {1.8, 3.2}
 Config.MeetupReactionChance = 0.55
 Config.MeetupReactionDelayRange = {0.25, 0.9}
 
+-- Spawn Gates (enter/leave illusion)
+Config.SpawnGatesEnabled = true
+Config.SpawnGateArriveRadius = 2.5
+
+-- NPC "lifetime" (they leave town via a gate, vanish, then re-enter later)
+Config.AgentLifetimeRange = {60, 180}      -- seconds before they leave
+Config.AgentRespawnDelayRange = {3, 12}    -- seconds before they re-enter
+
+-- When despawned, don't render them and don't simulate movement
+Config.DespawnedAgentsDoNothing = true
+
 return Config
