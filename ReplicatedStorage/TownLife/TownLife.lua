@@ -11,6 +11,32 @@ local Dialogue = require(script.Parent.Dialogue)
 
 local TownLife = {}
 
+local function distSq(a, b)
+	local dx = a.X - b.X
+	local dy = a.Y - b.Y
+	local dz = a.Z - b.Z
+	return dx*dx + dy*dy + dz*dz
+end
+
+-- keeps list sorted by d2 asc, max size K
+local function topKInsert(list, agent, d2, K)
+	local n = #list
+	if n < K then
+		list[n+1] = {agent = agent, d2 = d2}
+	else
+		-- if not better than worst, skip
+		if d2 >= list[n].d2 then return end
+		list[n] = {agent = agent, d2 = d2}
+	end
+
+	-- bubble up last element to keep sorted (K is small, this is cheap)
+	local i = math.min(#list, K)
+	while i > 1 and list[i].d2 < list[i-1].d2 do
+		list[i], list[i-1] = list[i-1], list[i]
+		i -= 1
+	end
+end
+
 local function getOrCreateRoot()
 	local root = workspace:FindFirstChild("__TownLife")
 	if not root then
@@ -291,57 +317,104 @@ function TownLife.Start()
 			if doNear then
 				EventSim.updateTown(town, Config, now, focusPos)
 			end
-
-			-- Candidates for rendering
-			local candidates = {}
-			for _, agent in ipairs(town.agents) do
-				-- If you added despawn state, skip rendering those
-				if agent.state ~= "Despawned" then
-					local d = (agent.pos - focusPos).Magnitude
-					if d <= Config.VisibleDistance then
-						table.insert(candidates, {agent = agent, d = d})
+		
+			-- ---- VISIBILITY REFRESH (rate-limited) ----
+			town._visTimer = (town._visTimer or 0) + dt
+		
+			local visR2 = Config.VisibleDistance * Config.VisibleDistance
+			local refreshEvery = Config.VisibilityRefreshInterval or 0.25
+		
+			if town._visTimer >= refreshEvery or not town._visibleIds then
+				town._visTimer = 0
+		
+				local K = Config.MaxVisibleNPCs
+				local top = {}
+		
+				-- Scan agents once (distance²), keep only top K
+				for _, agent in ipairs(town.agents) do
+					if agent.state ~= "Despawned" then
+						local d2 = distSq(agent.pos, focusPos)
+						agent._d2 = d2 -- cache for sim decisions
+						if d2 <= visR2 then
+							topKInsert(top, agent, d2, K)
+						end
+					else
+						agent._d2 = math.huge
+					end
+				end
+		
+				-- Build visible set for this town
+				local visibleIds = {}
+				for i = 1, #top do
+					visibleIds[top[i].agent.id] = true
+				end
+				town._visibleIds = visibleIds
+				town._visibleList = top
+		
+				-- Release models that belong to this town but are no longer visible
+				for agentId in pairs(renderer.active) do
+					if town._agentById[agentId] and not visibleIds[agentId] then
+						renderer:releaseAgent(agentId)
+					end
+				end
+		
+				-- Ensure models for currently visible agents (no full-agent loop needed)
+				for i = 1, #top do
+					renderer:getModelForAgent(top[i].agent)
+				end
+			else
+				-- Even when not refreshing, still cache d2 cheaply for the visible ones
+				-- (so near/far decisions stay responsive without rescanning everyone)
+				if town._visibleList then
+					for i = 1, #town._visibleList do
+						local agent = town._visibleList[i].agent
+						agent._d2 = distSq(agent.pos, focusPos)
 					end
 				end
 			end
-			table.sort(candidates, function(a, b) return a.d < b.d end)
-
-			local shouldBeVisible = {}
-			for i = 1, math.min(#candidates, Config.MaxVisibleNPCs) do
-				shouldBeVisible[candidates[i].agent.id] = true
-			end
-
-			-- Acquire/release models
-			for _, agent in ipairs(town.agents) do
-				if shouldBeVisible[agent.id] then
-					renderer:getModelForAgent(agent)
-				else
-					renderer:releaseAgent(agent.id)
-				end
-			end
-
+		
 			-- Contextual meetup dialogue (speaker + reactions)
 			if doNear then
 				Dialogue.StepTown(town, Config, renderer, now)
 			end
-
-			-- Sim step
-			for _, agent in ipairs(town.agents) do
-				local d = (agent.pos - focusPos).Magnitude
-				local isNear = d <= Config.VisibleDistance
-
-				if isNear then
-					if doNear then
+		
+			-- ---- NEAR SIM: only step visible agents (<= MaxVisibleNPCs) ----
+			if doNear and town._visibleList then
+				for i = 1, #town._visibleList do
+					local agent = town._visibleList[i].agent
+					-- Only step if still near-ish
+					if (agent._d2 or math.huge) <= visR2 and agent.state ~= "Despawned" then
 						AgentSim.stepAgent(agent, town, Config, town.rng, nearTick, now, true)
 					end
-					renderer:updateAgentVisual(agent, dt, now)
-
-					-- If agent despawned this tick, hide immediately
-					if agent.state == "Despawned" then
+				end
+			end
+		
+			-- ---- VISUAL UPDATE: only visible agents each frame ----
+			if town._visibleList then
+				for i = 1, #town._visibleList do
+					local agent = town._visibleList[i].agent
+					if agent.state ~= "Despawned" then
+						renderer:updateAgentVisual(agent, dt, now)
+					else
+						-- If agent despawned, hide immediately
 						renderer:releaseAgent(agent.id)
 					end
-				else
-					if doFar then
-						AgentSim.stepAgent(agent, town, Config, town.rng, farTick, now, false)
+				end
+			end
+		
+			-- ---- FAR SIM: budgeted round-robin (prevents spikes for huge towns) ----
+			if doFar then
+				local budget = Config.FarSimBudgetPerTick or 40
+				local n = #town.agents
+				if n > 0 then
+					for _ = 1, budget do
+						town._farRR = (town._farRR % n) + 1
+						local agent = town.agents[town._farRR]
+		
+						-- Skip visible agents and despawned ones (despawned agent sim handled inside AgentSim if you do that)
+						if agent.state ~= "Despawned" and not (town._visibleIds and town._visibleIds[agent.id]) then
+							AgentSim.stepAgent(agent, town, Config, town.rng, farTick, now, false)
+						end
 					end
 				end
 			end
