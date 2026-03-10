@@ -1,103 +1,96 @@
-# NPC Sink (TownLife)
+# npc-sink (TownLife)
 
-This is a “town life” system for Roblox, work in progress and not meant to be used currently
+This is a “town life” system for Roblox.
 
-You mark out a town with a few invisible parts (zones, road points, hotspots, etc). Then it spawns simple NPCs that:
+You place a few invisible marker parts (town zone, road nodes, hotspots, etc) and it spawns simple NPCs that:
 - walk around on the roads
-- sometimes stop at points of interest
+- sometimes stop at POIs
 - sometimes group up at hotspots and “talk”
 - enter/leave through spawn gates (so they don’t just pop in)
 
-It runs on the **client** and the NPCs are **not Humanoids** (they’re lightweight, R6-shaped part models). :contentReference[oaicite:0]{index=0}
+It runs on the **client** and the NPCs are **not Humanoids** (they’re lightweight, R6-shaped part models).
 
 ---
 
-## Drop it into a place
+## How to use
 
-Copy these folders into your place:
+Copy these into your place:
 - `ReplicatedStorage/TownLife/`
-- `StarterPlayer/StarterPlayerScripts/TownLife.client.lua` :contentReference[oaicite:1]{index=1}
+- `StarterPlayer/StarterPlayerScripts/TownLife.client.lua`
 
-The system spawns everything under `Workspace.__TownLife` so it’s easy to delete/clean up.
+Press Play.
+- F6 = stop
+- F7 = start
+
+Everything it spawns goes under `Workspace.__TownLife`.
 
 ---
 
-## What you place in the world (the markers)
+## Markers you place (Tag Editor)
 
-Use **Tag Editor** in Studio (View, Tag Editor). Make small anchored parts (CanCollide off, Transparency 1 recommended), tag them, and set Attributes.
+Make small anchored Parts (CanCollide off, Transparency 1 recommended).
+Tag them and set Attributes.
 
 ### Required
+
 **TownZone**
 - Tag: `TownZone`
 - Attributes:
-  - `TownId` (string) — example: `TownA`
+  - `TownId` (string) example: `TownA`
   - `PopulationCap` (number, optional)
 
 **RoadNode**
 - Tag: `RoadNode`
 - Attributes:
   - `TownId` (string)
-  - `Links` (string, optional): `"NodeName1,NodeName2"` (manual connections)
-    - If you don’t use `Links`, nearby nodes auto-connect based on `AutoLinkDistance` in `Config.lua`. :contentReference[oaicite:3]{index=3}
+  - `Links` (string, optional) example: `Node01,Node02`
+    - If you don’t use Links, nearby nodes auto-connect (see `AutoLinkDistance` in Config).
 
-### Optional (but makes it feel way more alive)
-**POI (points of interest)**
+### Optional (recommended)
+
+**POI**
 - Tag: `POI`
 - Attributes:
   - `TownId` (string)
-  - `Type` (string) — example: `Market`, `Inn`, `Home`, `Work`
+  - `Type` (string) example: `Market`, `Inn`, `Home`, `Work`
 
-NPCs sometimes walk to these and idle longer there. :contentReference[oaicite:4]{index=4}
-
-**Hotspot (meetups)**
+**Hotspot** (group meetups + talking)
 - Tag: `Hotspot`
 - Attributes:
   - `TownId` (string)
-  - `Type` (string) — example: `Tavern`, `Fountain`, `Market` (you can add your own)
+  - `Type` (string) example: `Tavern`, `Fountain`, `Market`
   - `Capacity` (number, optional)
   - `Radius` (number, optional)
 
-NPCs can form a little circle here, face in, and talk. :contentReference[oaicite:5]{index=5}
-
-**SpawnGate**
+**SpawnGate** (enter/leave illusion)
 - Tag: `SpawnGate`
 - Attributes:
   - `TownId` (string)
-  - `Weight` (number, optional) — higher = used more
-  - `Node` (string, optional) — name of the RoadNode it connects to (if not set, it picks the nearest node)
-
-NPCs “walk in” from gates, and later walk back out and vanish, then come back later. :contentReference[oaicite:6]{index=6}
+  - `Weight` (number, optional) higher = used more
+  - `Node` (string, optional) name of a RoadNode to connect to
+    - If Node isn’t set, it uses the nearest road node.
 
 ---
 
-## Bubble talk (TextChatService)
+## Bubble talk
 
-Meetup talk uses Roblox bubble chat (`TextChatService:DisplayBubble`). :contentReference[oaicite:7]{index=7}
+Meetup talk uses Roblox bubble chat (`TextChatService:DisplayBubble`).
 
 To see bubbles:
-- Make sure Bubble Chat is enabled in your experience settings (or set `AutoEnableBubbleChat = true` in `Config.lua`). :contentReference[oaicite:8]{index=8}
+- enable Bubble Chat in your game settings,
+OR
+- set `AutoEnableBubbleChat = true` in `Config.lua`.
 
 ---
 
-## Where to tweak stuff
+## Settings
 
-### `ReplicatedStorage/TownLife/Config.lua`
-This is where you change:
-- how many NPCs exist per town
-- how many can be visible at once
-- how far away they show up
-- walking speed + how often they update
-- meetup sizes / frequency
+Edit `ReplicatedStorage/TownLife/Config.lua` to change:
+- population cap
+- max visible NPCs
+- distances
+- meetup size/frequency
 - dialogue frequency
-- spawn gate timing (how long before they leave, how long before they come back) :contentReference[oaicite:9]{index=9}
+- spawn gate timing (leave/respawn)
 
-### `ReplicatedStorage/TownLife/Dialogue.lua`
-Dialogue is just lists of lines grouped by hotspot type (`PACKS` table). Add your own types and lines there. :contentReference[oaicite:10]{index=10}
-
----
-
-## Notes
-
-- This is **ambient**. It’s meant to look like a town is alive, not be a deep “real” sim.
-- It runs on the **client**, so different players can see different crowds (that’s intentional for performance). :contentReference[oaicite:11]{index=11}
-- NPCs are simple R6-shaped part models (no Humanoid). :contentReference[oaicite:12]{index=12}
+Edit `ReplicatedStorage/TownLife/Dialogue.lua` to add more hotspot types + lines.
