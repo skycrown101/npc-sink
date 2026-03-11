@@ -1,16 +1,14 @@
 # npc-sink (TownLife)
 
-This is a “town life” system for Roblox.
+This spawns “town life” NPCs in Roblox.
 
-You place a few invisible marker parts (town zone, road nodes, hotspots, etc) and it spawns simple NPCs that:
-- walk around on the roads
+You place a few invisible marker parts (town zone, road nodes, hotspots, spawn gates). Then it spawns simple NPCs that:
+- walk around on roads
 - sometimes stop at POIs
-- sometimes group up at hotspots and “talk”
-- enter/leave through spawn gates (so they don’t just pop in)
+- sometimes group up at hotspots and talk
+- enter/leave through gates (so they don’t pop in)
 
-It runs on the **client** and the NPCs are **not Humanoids** (they’re lightweight, R6-shaped part models).
-
----
+It runs on the client and the NPCs are not Humanoids (they’re lightweight, R6-shaped part models).
 
 ## How to use
 
@@ -24,9 +22,7 @@ Press Play.
 
 Everything it spawns goes under `Workspace.__TownLife`.
 
----
-
-## Markers you place (Tag Editor)
+## Markers (Tag Editor)
 
 Make small anchored Parts (CanCollide off, Transparency 1 recommended).
 Tag them and set Attributes.
@@ -44,7 +40,7 @@ Tag them and set Attributes.
 - Attributes:
   - `TownId` (string)
   - `Links` (string, optional) example: `Node01,Node02`
-    - If you don’t use Links, nearby nodes auto-connect (see `AutoLinkDistance` in Config).
+    - If you don’t use `Links`, nearby nodes auto-connect (see `AutoLinkDistance` in Config).
 
 ### Optional (recommended)
 
@@ -62,7 +58,7 @@ Tag them and set Attributes.
   - `Capacity` (number, optional)
   - `Radius` (number, optional)
 
-**SpawnGate** (enter/leave illusion)
+**SpawnGate** (enter/leave)
 - Tag: `SpawnGate`
 - Attributes:
   - `TownId` (string)
@@ -70,18 +66,14 @@ Tag them and set Attributes.
   - `Node` (string, optional) name of a RoadNode to connect to
     - If Node isn’t set, it uses the nearest road node.
 
----
-
 ## Bubble talk
 
 Meetup talk uses Roblox bubble chat (`TextChatService:DisplayBubble`).
 
 To see bubbles:
-- enable Bubble Chat in your game settings,
+- enable Bubble Chat in your game settings
 OR
 - set `AutoEnableBubbleChat = true` in `Config.lua`.
-
----
 
 ## Settings
 
@@ -91,6 +83,6 @@ Edit `ReplicatedStorage/TownLife/Config.lua` to change:
 - distances
 - meetup size/frequency
 - dialogue frequency
-- spawn gate timing (leave/respawn)
+- spawn gate timing
 
 Edit `ReplicatedStorage/TownLife/Dialogue.lua` to add more hotspot types + lines.
