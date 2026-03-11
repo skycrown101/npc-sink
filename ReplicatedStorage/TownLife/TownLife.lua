@@ -263,36 +263,34 @@ function TownLife.Start()
 
 	for _, town in ipairs(towns) do
 		town._agentById = {}
-
+	
 		for i = 1, town.popCap do
 			-- Create with dummy values; initAtGate (if present) will override
 			local agent = AgentSim.newAgent(nextAgentId, town.id, 1, Vector3.zero, town.rng)
-
+	
 			-- If you implemented spawn gates in AgentSim, use them
 			if Config.SpawnGatesEnabled and AgentSim.initAtGate and town.spawnGates and #town.spawnGates > 0 then
 				AgentSim.initAtGate(agent, town, Config, town.rng, nowSpawn)
 			else
-				-- fallback: start at random road node
 				local startNode = town.rng:NextInteger(1, #town.graph.nodes)
 				local startPos = town.graph.nodes[startNode].pos
 				agent.nodeIndex = startNode
 				agent.pos = startPos
 				agent.targetPos = nil
 			end
-
+	
 			AgentSim.ensureTarget(agent, town, Config, town.rng, nowSpawn)
-
+	
 			table.insert(town.agents, agent)
 			town._agentById[agent.id] = agent
 			nextAgentId += 1
-
-			town._visTimer = 1e9 -- force first refresh
-			town._visibleIds = {} -- [agentId] = true
-			town._visibleList = {} -- array of {agent=..., d2=...} (topK result)
-			town._farRR = 0 -- round-robin index for far stepping
 		end
+	
+		town._visTimer = 1e9
+		town._visibleIds = {}
+		town._visibleList = {}
+		town._farRR = 0
 	end
-
 	-- Disconnect any previous loop
 	if TownLife._conn then
 		TownLife._conn:Disconnect()
