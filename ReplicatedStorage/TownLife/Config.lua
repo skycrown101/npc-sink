@@ -71,4 +71,8 @@ Config.DespawnedAgentsDoNothing = true
 Config.VisibilityRefreshInterval = 0.25 -- seconds
 Config.FarSimBudgetPerTick = 40 -- how many far agents to advance each far tick
 
+-- Queue hotspot defaults
+Config.QueueSpacingDefault = 2.4
+Config.QueueSideJitterDefault = 0.35
+
 return Config
