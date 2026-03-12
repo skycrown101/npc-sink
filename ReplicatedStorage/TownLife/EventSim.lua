@@ -26,31 +26,54 @@ local function getHotspotRadius(hotspot, config)
 	return config.HotspotDefaultRadius
 end
 
+local function getFormation(hotspot)
+	local f = hotspot.inst:GetAttribute("Formation")
+	if typeof(f) == "string" and f ~= "" then
+		return f
+	end
+	return "Circle"
+end
+
+local function getQueueSpacing(hotspot, config)
+	local s = hotspot.inst:GetAttribute("QueueSpacing")
+	if typeof(s) == "number" and s > 0.5 then
+		return s
+	end
+	return config.QueueSpacingDefault or 2.4
+end
+
+local function getQueueSideJitter(hotspot, config)
+	local j = hotspot.inst:GetAttribute("QueueSideJitter")
+	if typeof(j) == "number" and j >= 0 then
+		return j
+	end
+	return config.QueueSideJitterDefault or 0.35
+end
+
 function EventSim.initTown(town, config, now)
 	town._events = {}
 	town._nextEventId = 1
 	town._nextMeetupAt = now + randRange(town.rng, config.MeetupCooldownRange[1], config.MeetupCooldownRange[2])
 end
 
-local function endMeetup(town, config, now, event)
-	-- release agents back to normal walking
+local function endMeetup(town, event)
 	for _, agentId in ipairs(event.participants) do
 		local agent = town._agentById[agentId]
 		if agent then
 			agent.meetup = nil
 			agent.state = "Walk"
-			-- Ensure they get a new target next sim step
 			agent.targetPos = nil
 		end
 	end
 end
 
-local function cleanupExpiredEvents(town, config, now)
+local function cleanupExpiredEvents(town, now)
 	if not town._events then return end
+
 	local keep = {}
 	for _, ev in ipairs(town._events) do
 		if now >= ev.endAt then
-			endMeetup(town, config, now, ev)
+			endMeetup(town, ev)
 		else
 			table.insert(keep, ev)
 		end
@@ -72,15 +95,15 @@ local function pickHotspotNearFocus(town, config, rng, focusPos)
 	for _, hs in ipairs(town.hotspots) do
 		local d = (hs.pos - focusPos).Magnitude
 		if d <= config.MeetupSpawnRadius then
-			table.insert(candidates, {hs = hs, d = d})
+			table.insert(candidates, { hs = hs, d = d })
 		end
 	end
+
 	if #candidates == 0 then
 		return nil
 	end
 
-	-- Slight bias toward closer hotspots so you usually see the meetup
-	-- Weight = 1 - (d/r)
+	-- bias to the ones closer
 	local totalW = 0
 	for _, c in ipairs(candidates) do
 		c.w = 0.2 + 0.8 * (1 - clamp01(c.d / config.MeetupSpawnRadius))
@@ -100,19 +123,22 @@ local function pickHotspotNearFocus(town, config, rng, focusPos)
 end
 
 local function pickAgentsForMeetup(town, config, rng, hotspot, desiredCount)
-	-- Choose nearby free agents (not already in a meetup)
 	local scored = {}
 	for _, agent in ipairs(town.agents) do
 		if agent.meetup == nil and agent.state ~= "MeetupGo" and agent.state ~= "MeetupIdle" then
 			local d = (agent.pos - hotspot.pos).Magnitude
-			table.insert(scored, {agent = agent, d = d})
+			table.insert(scored, { agent = agent, d = d })
 		end
 	end
 
-	if #scored == 0 then return {} end
-	table.sort(scored, function(a, b) return a.d < b.d end)
+	if #scored == 0 then
+		return {}
+	end
 
-	-- Respect hotspot capacity
+	table.sort(scored, function(a, b)
+		return a.d < b.d
+	end)
+
 	local cap = math.min(getHotspotCapacity(hotspot, config), desiredCount)
 
 	local picked = {}
@@ -122,21 +148,20 @@ local function pickAgentsForMeetup(town, config, rng, hotspot, desiredCount)
 	return picked
 end
 
+-- circle meetup slots
 local function assignCircleSlots(town, config, rng, hotspot, agents)
 	local center = hotspot.pos
 	local n = #agents
 	if n == 0 then return end
 
-	-- radius can vary a little; also respect hotspot radius so groups don’t overlap walls as much
 	local baseR = config.MeetupCircleRadius
 	local hsR = getHotspotRadius(hotspot, config)
 	local r = math.max(2.5, math.min(baseR, hsR)) + rng:NextNumber() * config.MeetupCircleJitter
 
 	local startAngle = rng:NextNumber() * math.pi * 2
+
 	for i, agent in ipairs(agents) do
 		local a = startAngle + (i - 1) * (2 * math.pi / n)
-
-		-- Keep y at hotspot height (simple). If your towns have slopes, you can raycast here later.
 		local slotPos = Vector3.new(
 			center.X + math.cos(a) * r,
 			center.Y,
@@ -144,10 +169,56 @@ local function assignCircleSlots(town, config, rng, hotspot, agents)
 		)
 
 		agent.meetup = {
+			-- meetup.center as the look at point
 			center = center,
 			slotPos = slotPos,
-			endAt = nil, -- filled in later
+			endAt = nil,
 			eventId = nil,
+			formation = "Circle",
+		}
+	end
+end
+
+-- queue meetup slots
+local function assignQueueSlots(town, config, rng, hotspot, agents)
+	local center = hotspot.pos
+	local n = #agents
+	if n == 0 then return end
+
+	-- use oreintatio if possible
+	local forward = Vector3.new(0, 0, -1)
+	if hotspot.inst and hotspot.inst:IsA("BasePart") then
+		forward = hotspot.inst.CFrame.LookVector
+		forward = Vector3.new(forward.X, 0, forward.Z)
+		if forward.Magnitude < 0.001 then
+			forward = Vector3.new(0, 0, -1)
+		else
+			forward = forward.Unit
+		end
+	end
+
+	local right = Vector3.new(-forward.Z, 0, forward.X)
+
+	local spacing = getQueueSpacing(hotspot, config)
+	local sideJitter = getQueueSideJitter(hotspot, config)
+
+	-- where to look, like facing somewhere
+	local lookAt = center + forward * math.max(4, spacing * 2)
+
+	-- front person stands closest to the center
+	for i, agent in ipairs(agents) do
+		local behind = (i - 1) * spacing
+		local lateral = (rng:NextNumber() * 2 - 1) * sideJitter
+
+		local slotPos = center - forward * behind + right * lateral
+		slotPos = Vector3.new(slotPos.X, center.Y, slotPos.Z)
+		--facing forward (the center = lookat)
+		agent.meetup = {
+			center = lookAt,
+			slotPos = slotPos,
+			endAt = nil,
+			eventId = nil,
+			formation = "Queue",
 		}
 	end
 end
@@ -155,17 +226,15 @@ end
 function EventSim.trySpawnMeetup(town, config, now, focusPos)
 	if not config.MeetupsEnabled then return end
 	if not town.hotspots or #town.hotspots == 0 then return end
-
 	if now < (town._nextMeetupAt or 0) then return end
+
 	if countActiveMeetups(town) >= config.MaxActiveMeetupsPerTown then
-		-- push next attempt slightly forward so we don't spam
 		town._nextMeetupAt = now + 2
 		return
 	end
 
 	local hotspot = pickHotspotNearFocus(town, config, town.rng, focusPos)
 	if not hotspot then
-		-- no visible hotspots near player right now; try later
 		town._nextMeetupAt = now + 3
 		return
 	end
@@ -179,12 +248,17 @@ function EventSim.trySpawnMeetup(town, config, now, focusPos)
 		return
 	end
 
-	-- Build event
 	local duration = randRange(town.rng, config.MeetupDurationRange[1], config.MeetupDurationRange[2])
 	local eventId = town._nextEventId
 	town._nextEventId += 1
 
-	assignCircleSlots(town, config, town.rng, hotspot, agents)
+	-- choose formation
+	local formation = getFormation(hotspot)
+	if formation == "Queue" then
+		assignQueueSlots(town, config, town.rng, hotspot, agents)
+	else
+		assignCircleSlots(town, config, town.rng, hotspot, agents)
+	end
 
 	local participants = {}
 	for _, agent in ipairs(agents) do
@@ -194,25 +268,27 @@ function EventSim.trySpawnMeetup(town, config, now, focusPos)
 		agent.meetup.endAt = now + duration
 		agent.meetup.eventId = eventId
 	end
-	-- Pick a speaker + line budget for this meetup
-local speaker = agents[town.rng:NextInteger(1, #agents)]
-local linesLeft = town.rng:NextInteger(config.MeetupLinesPerMeetupRange[1], config.MeetupLinesPerMeetupRange[2])
-local nextLineAt = now + town.rng:NextNumber() -- small random offset
 
-table.insert(town._events, {
-	id = eventId,
-	type = "Meetup",
-	hotspot = hotspot,
-	participants = participants,
-	startAt = now,
-	endAt = now + duration,
+	-- speaker
+	local speaker = agents[town.rng:NextInteger(1, #agents)]
+	local linesLeft = town.rng:NextInteger(config.MeetupLinesPerMeetupRange[1], config.MeetupLinesPerMeetupRange[2])
+	local nextLineAt = now + town.rng:NextNumber()
 
-	-- dialogue controls
-	speakerId = speaker.id,
-	linesLeft = linesLeft,
-	nextLineAt = nextLineAt,
-	pending = {}, -- queued listener reactions: {id=agentId, at=time, text=string}
-})
+	table.insert(town._events, {
+		id = eventId,
+		type = "Meetup",
+		hotspot = hotspot,
+		participants = participants,
+		startAt = now,
+		endAt = now + duration,
+
+		formation = formation,
+
+		speakerId = speaker.id,
+		linesLeft = linesLeft,
+		nextLineAt = nextLineAt,
+		pending = {},
+	})
 
 	town._nextMeetupAt = now + randRange(town.rng, config.MeetupCooldownRange[1], config.MeetupCooldownRange[2])
 end
@@ -221,8 +297,7 @@ function EventSim.updateTown(town, config, now, focusPos)
 	if not town._events then
 		EventSim.initTown(town, config, now)
 	end
-
-	cleanupExpiredEvents(town, config, now)
+	cleanupExpiredEvents(town, now)
 	EventSim.trySpawnMeetup(town, config, now, focusPos)
 end
 
