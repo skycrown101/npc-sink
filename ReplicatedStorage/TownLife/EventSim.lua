@@ -103,7 +103,7 @@ local function pickHotspotNearFocus(town, config, rng, focusPos)
 		return nil
 	end
 
-	-- bias to the ones closer
+	-- bias toward closer hotspots
 	local totalW = 0
 	for _, c in ipairs(candidates) do
 		c.w = 0.2 + 0.8 * (1 - clamp01(c.d / config.MeetupSpawnRadius))
@@ -148,7 +148,7 @@ local function pickAgentsForMeetup(town, config, rng, hotspot, desiredCount)
 	return picked
 end
 
--- circle meetup slots
+-- Circle meetup slots (existing behavior)
 local function assignCircleSlots(town, config, rng, hotspot, agents)
 	local center = hotspot.pos
 	local n = #agents
@@ -169,7 +169,7 @@ local function assignCircleSlots(town, config, rng, hotspot, agents)
 		)
 
 		agent.meetup = {
-			-- meetup.center as the look at point
+			-- AgentSim uses meetup.center as the look-at point while idling
 			center = center,
 			slotPos = slotPos,
 			endAt = nil,
@@ -179,13 +179,13 @@ local function assignCircleSlots(town, config, rng, hotspot, agents)
 	end
 end
 
--- queue meetup slots
+-- Queue meetup slots (new)
 local function assignQueueSlots(town, config, rng, hotspot, agents)
 	local center = hotspot.pos
 	local n = #agents
 	if n == 0 then return end
 
-	-- use oreintatio if possible
+	-- Use hotspot part orientation if possible
 	local forward = Vector3.new(0, 0, -1)
 	if hotspot.inst and hotspot.inst:IsA("BasePart") then
 		forward = hotspot.inst.CFrame.LookVector
@@ -202,19 +202,19 @@ local function assignQueueSlots(town, config, rng, hotspot, agents)
 	local spacing = getQueueSpacing(hotspot, config)
 	local sideJitter = getQueueSideJitter(hotspot, config)
 
-	-- where to look, like facing somewhere
+	-- look-at point (so they face toward the “front” of the queue)
 	local lookAt = center + forward * math.max(4, spacing * 2)
 
-	-- front person stands closest to the center
+	-- Front person stands closest to the center, others behind them
 	for i, agent in ipairs(agents) do
 		local behind = (i - 1) * spacing
 		local lateral = (rng:NextNumber() * 2 - 1) * sideJitter
 
 		local slotPos = center - forward * behind + right * lateral
 		slotPos = Vector3.new(slotPos.X, center.Y, slotPos.Z)
-		--facing forward (the center = lookat)
+
 		agent.meetup = {
-			center = lookAt,
+			center = lookAt, -- face forward while idling
 			slotPos = slotPos,
 			endAt = nil,
 			eventId = nil,
@@ -252,7 +252,7 @@ function EventSim.trySpawnMeetup(town, config, now, focusPos)
 	local eventId = town._nextEventId
 	town._nextEventId += 1
 
-	-- choose formation
+	-- Choose formation
 	local formation = getFormation(hotspot)
 	if formation == "Queue" then
 		assignQueueSlots(town, config, town.rng, hotspot, agents)
@@ -269,7 +269,7 @@ function EventSim.trySpawnMeetup(town, config, now, focusPos)
 		agent.meetup.eventId = eventId
 	end
 
-	-- speaker
+	-- Speaker + talk budget (existing system)
 	local speaker = agents[town.rng:NextInteger(1, #agents)]
 	local linesLeft = town.rng:NextInteger(config.MeetupLinesPerMeetupRange[1], config.MeetupLinesPerMeetupRange[2])
 	local nextLineAt = now + town.rng:NextNumber()
