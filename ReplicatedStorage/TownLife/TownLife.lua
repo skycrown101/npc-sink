@@ -129,11 +129,11 @@ local function scanTowns()
 end
 
 local function findNearestNodeIndex(graph, pos)
-	local bestI, bestD = 1, math.huge
+	local bestI, bestD2 = 1, math.huge
 	for i, n in ipairs(graph.nodes) do
-		local d = (n.pos - pos).Magnitude
-		if d < bestD then
-			bestD, bestI = d, i
+		local d2 = distSq(n.pos, pos)
+		if d2 < bestD2 then
+			bestD2, bestI = d2, i
 		end
 	end
 	return bestI
