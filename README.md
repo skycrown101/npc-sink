@@ -65,7 +65,10 @@ Tag them and set Attributes.
   - `Weight` (number, optional) higher = used more
   - `Node` (string, optional) name of a RoadNode to connect to
     - If Node isn’t set, it uses the nearest road node.
-
+  - `Formation` (string, optional): `Circle` (default) or `Queue`
+  - `QueueSpacing` (number, optional): spacing between people in a queue
+  - `QueueSideJitter` (number, optional): small sideways randomness so the line isn’t perfect
+Tip: rotate the Hotspot part to aim the queue direction (it uses the part’s forward direction).
 ## Bubble talk
 
 Meetup talk uses Roblox bubble chat (`TextChatService:DisplayBubble`).
