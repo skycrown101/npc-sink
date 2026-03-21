@@ -4,10 +4,6 @@ local function randRange(rng, a, b)
 	return a + (b - a) * rng:NextNumber()
 end
 
-local function randRange(rng, a, b)
-	return a + (b - a) * rng:NextNumber()
-end
-
 local function weightedPickGateIndex(gates, rng)
 	if not gates or #gates == 0 then return nil end
 	local total = 0
