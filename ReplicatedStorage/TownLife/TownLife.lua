@@ -374,12 +374,14 @@ function TownLife.Start()
 		
 				-- (collect first so we don't mutate renderer.active while iterating it)
 				local toRelease = nil
+				
 				for agentId in pairs(renderer.active) do
 					if town._agentById[agentId] and not visibleIds[agentId] then
 						toRelease = toRelease or {}
 						table.insert(toRelease, agentId)
 					end
 				end
+				
 				if toRelease then
 					for _, agentId in ipairs(toRelease) do
 						renderer:releaseAgent(agentId)
