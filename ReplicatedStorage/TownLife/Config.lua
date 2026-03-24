@@ -75,4 +75,16 @@ Config.FarSimBudgetPerTick = 40 -- how many far agents to advance each far tick
 Config.QueueSpacingDefault = 2.4
 Config.QueueSideJitterDefault = 0.35
 
+Config.RoleWeights = {
+	{"Guard", 0.18},
+	{"Worker", 0.42},
+	{"Shopper", 0.40},
+}
+
+-- Guard behavior
+Config.GuardPatrolChance = 0.70       -- how often guards pick patrol nodes
+Config.GuardPOIVisitChance = 0.08     -- guards rarely visit POIs
+Config.GuardGuardPostChance = 0.25    -- sometimes go to guard posts
+Config.GuardPostIdleMultiplier = 1.4 
+
 return Config

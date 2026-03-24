@@ -209,6 +209,22 @@ local function buildTown(townId, raw)
 		end
 	end
 
+	-- Patrol nodes are RoadNodes with Attribute Patrol = true
+	local patrolNodes = {}
+	for i, node in ipairs(graph.nodes) do
+		if node.inst and node.inst:GetAttribute("Patrol") == true then
+			table.insert(patrolNodes, i)
+		end
+	end
+	
+	-- Guard posts are hotspots with Type="GuardPost"
+	local guardPosts = {}
+	for i, hs in ipairs(hotspots) do
+		if hs.type == "GuardPost" then
+			table.insert(guardPosts, i)
+		end
+	end
+
 	local popCap = Config.MaxAgentsPerTownDefault
 	if raw.zoneParts and raw.zoneParts[1] then
 		local zcap = raw.zoneParts[1]:GetAttribute("PopulationCap")
@@ -236,6 +252,10 @@ local function buildTown(townId, raw)
 		_visibleIds = {},
 		_visibleList = {},
 		_farRR = 0,
+
+		patrolNodes = patrolNodes,
+		guardPosts = guardPosts,
+		
 	}
 end
 
@@ -276,6 +296,7 @@ function TownLife.Start()
 		for _ = 1, town.popCap do
 			-- create agent
 			local agent = AgentSim.newAgent(nextAgentId, town.id, 1, Vector3.zero, town.rng)
+			AgentSim.assignRole(agent, town, Config, town.rng)
 
 			-- spawn gates
 			if Config.SpawnGatesEnabled and AgentSim.initAtGate and town.spawnGates and #town.spawnGates > 0 then
