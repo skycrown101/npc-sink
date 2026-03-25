@@ -13,15 +13,72 @@ local function makePart(name, size, color)
 	return p
 end
 
-local function makeR6NPCModel(appearanceSeed)
-	local rng = Random.new(appearanceSeed)
+local function getStyleForRole(config, role)
+	if config.RoleVisuals then
+		return config.RoleVisuals[role]
+	end
+	return nil
+end
 
-	local model = Instance.new("Model")
-	model.Name = "TownNPC_R6"
+local function getRoleColors(appearanceSeed, role, config)
+	local rng = Random.new(appearanceSeed)
+	local style = getStyleForRole(config, role)
 
 	local bodyColor = Color3.fromHSV(rng:NextNumber(), 0.45, 0.85)
 	local skinColor = Color3.fromHSV(rng:NextNumber(), 0.15, 0.95)
 	local accentColor = Color3.fromHSV(rng:NextNumber(), 0.60, 0.70)
+
+	if style then
+		bodyColor = style.BodyColor or bodyColor
+		skinColor = style.SkinColor or skinColor
+		accentColor = style.AccentColor or accentColor
+	end
+
+	return bodyColor, skinColor, accentColor, style
+end
+
+local function makeNameLabel(config)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "TownLifeLabel"
+	gui.Size = UDim2.fromOffset(config.NameLabelWidth or 140, config.NameLabelHeight or 34)
+	gui.StudsOffset = Vector3.new(0, config.NameLabelStudsOffset or 3.2, 0)
+	gui.AlwaysOnTop = config.NameLabelsAlwaysOnTop ~= false
+	gui.LightInfluence = 0
+	gui.Enabled = false
+
+	local label = Instance.new("TextLabel")
+	label.Name = "Text"
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(1, 1)
+	label.Font = Enum.Font.GothamSemibold
+	label.RichText = true
+	label.TextScaled = true
+	label.TextStrokeTransparency = 0.55
+	label.TextWrapped = true
+	label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	label.Parent = gui
+
+	return gui
+end
+
+local function ensureNameLabel(model, head, config)
+	local gui = model:FindFirstChild("TownLifeLabel")
+	if gui and gui:IsA("BillboardGui") then
+		gui.Adornee = head
+		return gui
+	end
+
+	gui = makeNameLabel(config)
+	gui.Adornee = head
+	gui.Parent = model
+	return gui
+end
+
+local function makeR6NPCModel(appearanceSeed, role, config)
+	local bodyColor, skinColor, accentColor = getRoleColors(appearanceSeed, role, config)
+
+	local model = Instance.new("Model")
+	model.Name = "TownNPC_R6"
 
 	local Head = makePart("Head", Vector3.new(2, 1, 1), skinColor)
 	local Torso = makePart("Torso", Vector3.new(2, 2, 1), bodyColor)
@@ -49,6 +106,8 @@ local function makeR6NPCModel(appearanceSeed)
 	Hat.Color = accentColor
 	Hat.Parent = model
 
+	ensureNameLabel(model, Head, config)
+
 	model.PrimaryPart = Torso
 	return model
 end
@@ -62,12 +121,18 @@ function Renderer.new(rootFolder, config)
 		active = {}, -- agentId -> model
 		activeCount = 0, -- faster than recounting
 
-		cache = {}, -- agentId -> {Torso=..., Head=..., LA=..., RA=..., LL=..., RL=..., Hat=...}
+		cache = {}, -- agentId -> {Torso=..., Head=..., LA=..., RA=..., LL=..., RL=..., Hat=..., Label=..., LabelText=...}
 	}
 	return setmetatable(self, { __index = Renderer })
 end
 
 local function buildCache(m)
+	local label = m:FindFirstChild("TownLifeLabel")
+	local text = nil
+	if label and label:IsA("BillboardGui") then
+		text = label:FindFirstChild("Text")
+	end
+
 	return {
 		Torso = m:FindFirstChild("Torso"),
 		Head = m:FindFirstChild("Head"),
@@ -76,7 +141,57 @@ local function buildCache(m)
 		LL = m:FindFirstChild("Left Leg"),
 		RL = m:FindFirstChild("Right Leg"),
 		Hat = m:FindFirstChild("Hat"),
+		Label = label,
+		LabelText = text,
 	}
+end
+
+function Renderer:applyAgentAppearance(m, agent)
+	local parts = buildCache(m)
+	local bodyColor, skinColor, accentColor, style = getRoleColors(agent.appearanceSeed, agent.role, self.config)
+
+	if parts.Head then
+		parts.Head.Color = skinColor
+	end
+	if parts.Torso then
+		parts.Torso.Color = bodyColor
+	end
+	if parts.LA then
+		parts.LA.Color = skinColor
+	end
+	if parts.RA then
+		parts.RA.Color = skinColor
+	end
+	if parts.LL then
+		parts.LL.Color = bodyColor
+	end
+	if parts.RL then
+		parts.RL.Color = bodyColor
+	end
+	if parts.Hat then
+		parts.Hat.Color = accentColor
+		parts.Hat.Transparency = style and style.HatTransparency or 0
+	end
+
+	if parts.Head then
+		parts.Label = ensureNameLabel(m, parts.Head, self.config)
+		parts.LabelText = parts.Label and parts.Label:FindFirstChild("Text")
+	end
+
+	if parts.LabelText then
+		parts.LabelText.TextColor3 = (style and style.LabelColor) or Color3.fromRGB(255, 255, 255)
+	end
+
+	self.cache[agent.id] = parts
+	return parts
+end
+
+local function buildLabelText(agent, config)
+	local displayName = agent.displayName or ("NPC " .. tostring(agent.id))
+	if config.ShowRoleLabels then
+		return string.format("%s\n%s", displayName, agent.role or "Citizen")
+	end
+	return displayName
 end
 
 function Renderer:getModelForAgent(agent)
@@ -91,13 +206,13 @@ function Renderer:getModelForAgent(agent)
 
 	m = table.remove(self.pool)
 	if not m then
-		m = makeR6NPCModel(agent.appearanceSeed)
+		m = makeR6NPCModel(agent.appearanceSeed, agent.role, self.config)
 	end
 
 	m.Parent = self.root
 	self.active[agent.id] = m
 	self.activeCount += 1
-	self.cache[agent.id] = buildCache(m)
+	self:applyAgentAppearance(m, agent)
 
 	return m
 end
@@ -134,8 +249,7 @@ function Renderer:updateAgentVisual(agent, dt, now)
 	local parts = self.cache[agent.id]
 	if not parts or not parts.Torso then
 		-- recover if cache got lost
-		self.cache[agent.id] = buildCache(m)
-		parts = self.cache[agent.id]
+		parts = self:applyAgentAppearance(m, agent)
 		if not parts or not parts.Torso then
 			return
 		end
@@ -178,6 +292,19 @@ function Renderer:updateAgentVisual(agent, dt, now)
 	-- hat follows head
 	if parts.Hat and parts.Head then
 		parts.Hat.CFrame = (rootCF * OFFSETS.Head) * OFFSETS.Hat
+	end
+
+	if parts.Label then
+		local enabled = self.config.ShowNameLabels == true
+		local cam = workspace.CurrentCamera
+		local maxDistance = self.config.NameLabelMaxDistance or 90
+		if enabled and cam then
+			enabled = (cam.CFrame.Position - agent.pos).Magnitude <= maxDistance
+		end
+		parts.Label.Enabled = enabled
+		if parts.LabelText then
+			parts.LabelText.Text = buildLabelText(agent, self.config)
+		end
 	end
 end
 
