@@ -1,3 +1,5 @@
+local Names = require(script.Parent.Names)
+
 local AgentSim = {}
 
 local function randRange(rng, a, b)
@@ -46,6 +48,7 @@ end
 
 function AgentSim.assignRole(agent, town, config, rng)
 	agent.role = weightedPickRole(config.RoleWeights, rng)
+	agent.displayName = Names.randomDisplayName(rng, agent.role, config)
 	return agent.role
 end
 
@@ -54,8 +57,9 @@ function AgentSim.newAgent(id, townId, startNodeIndex, startPos, rng)
 		id = id,
 		townId = townId,
 
-		-- role
+		-- role / identity
 		role = "Shopper",
+		displayName = nil,
 
 		-- simulation state
 		state = "Walk", -- Walk | Idle | SpawnIn | LeaveToGate | Despawned | MeetupGo | MeetupIdle
@@ -203,7 +207,7 @@ function AgentSim.stepAgent(agent, town, config, rng, dt, now, isNear)
 	if agent.state == "Despawned" then
 		if now >= (agent.respawnAt or 0) then
 			agent.appearanceSeed = rng:NextInteger(1, 2^30)
-			AgentSim.assignRole(agent, town, config, rng) -- new person can have new role
+			AgentSim.assignRole(agent, town, config, rng) -- new person can have new role + name
 			AgentSim.initAtGate(agent, town, config, rng, now)
 		end
 		return
