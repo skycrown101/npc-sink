@@ -85,6 +85,40 @@ Config.RoleWeights = {
 Config.GuardPatrolChance = 0.70       -- how often guards pick patrol nodes
 Config.GuardPOIVisitChance = 0.08     -- guards rarely visit POIs
 Config.GuardGuardPostChance = 0.25    -- sometimes go to guard posts
-Config.GuardPostIdleMultiplier = 1.4 
+Config.GuardPostIdleMultiplier = 1.4
+
+-- Identity / labels
+Config.ShowNameLabels = true
+Config.ShowRoleLabels = true
+Config.NameLabelMaxDistance = 90
+Config.NameLabelStudsOffset = 3.2
+Config.NameLabelWidth = 140
+Config.NameLabelHeight = 34
+Config.NameLabelsAlwaysOnTop = true
+
+-- Optional override pools for Names.lua (leave nil to use defaults)
+Config.NamePoolFirst = nil
+Config.NamePoolLast = nil
+
+-- Role-driven visual styling
+Config.RoleVisuals = {
+	Guard = {
+		BodyColor = Color3.fromRGB(85, 92, 104),
+		AccentColor = Color3.fromRGB(196, 61, 61),
+		LabelColor = Color3.fromRGB(255, 236, 176),
+		HatTransparency = 0,
+	},
+	Worker = {
+		BodyColor = Color3.fromRGB(152, 111, 72),
+		AccentColor = Color3.fromRGB(228, 176, 73),
+		LabelColor = Color3.fromRGB(236, 236, 236),
+		HatTransparency = 0.2,
+	},
+	Shopper = {
+		AccentColor = Color3.fromRGB(125, 105, 235),
+		LabelColor = Color3.fromRGB(236, 236, 236),
+		HatTransparency = 0,
+	},
+}
 
 return Config
