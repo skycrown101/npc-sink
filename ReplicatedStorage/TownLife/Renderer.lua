@@ -112,6 +112,21 @@ local function makeR6NPCModel(appearanceSeed, role, config)
 	return model
 end
 
+local function buildLabelText(agent, config)
+	local displayName = agent.displayName or ("NPC " .. tostring(agent.id))
+	if config.ShowRoleLabels then
+		return string.format("%s\n%s", displayName, agent.role or "Citizen")
+	end
+	return displayName
+end
+
+local function distSq(a, b)
+	local dx = a.X - b.X
+	local dy = a.Y - b.Y
+	local dz = a.Z - b.Z
+	return dx * dx + dy * dy + dz * dz
+end
+
 function Renderer.new(rootFolder, config)
 	local self = {
 		root = rootFolder,
@@ -119,7 +134,7 @@ function Renderer.new(rootFolder, config)
 
 		pool = {},
 		active = {}, -- agentId -> model
-		activeCount = 0, -- faster than recounting
+		activeCount = 0,
 
 		cache = {}, -- agentId -> {Torso=..., Head=..., LA=..., RA=..., LL=..., RL=..., Hat=..., Label=..., LabelText=...}
 	}
@@ -182,16 +197,20 @@ function Renderer:applyAgentAppearance(m, agent)
 		parts.LabelText.TextColor3 = (style and style.LabelColor) or Color3.fromRGB(255, 255, 255)
 	end
 
+	-- cache label-related state once instead of rebuilding every frame
+	agent._labelText = buildLabelText(agent, self.config)
+	agent._labelEnabled = false
+	agent._nextLabelCheckAt = 0
+
+	if parts.Label then
+		parts.Label.Enabled = false
+	end
+	if parts.LabelText then
+		parts.LabelText.Text = agent._labelText
+	end
+
 	self.cache[agent.id] = parts
 	return parts
-end
-
-local function buildLabelText(agent, config)
-	local displayName = agent.displayName or ("NPC " .. tostring(agent.id))
-	if config.ShowRoleLabels then
-		return string.format("%s\n%s", displayName, agent.role or "Citizen")
-	end
-	return displayName
 end
 
 function Renderer:getModelForAgent(agent)
@@ -248,7 +267,6 @@ function Renderer:updateAgentVisual(agent, dt, now)
 
 	local parts = self.cache[agent.id]
 	if not parts or not parts.Torso then
-		-- recover if cache got lost
 		parts = self:applyAgentAppearance(m, agent)
 		if not parts or not parts.Torso then
 			return
@@ -295,15 +313,33 @@ function Renderer:updateAgentVisual(agent, dt, now)
 	end
 
 	if parts.Label then
-		local enabled = self.config.ShowNameLabels == true
-		local cam = workspace.CurrentCamera
-		local maxDistance = self.config.NameLabelMaxDistance or 90
-		if enabled and cam then
-			enabled = (cam.CFrame.Position - agent.pos).Magnitude <= maxDistance
+		-- only re-check label visibility a few times per second
+		if now >= (agent._nextLabelCheckAt or 0) then
+			agent._nextLabelCheckAt = now + (self.config.NameLabelRefreshInterval or 0.25)
+
+			local enabled = self.config.ShowNameLabels == true
+			local cam = workspace.CurrentCamera
+			local maxDistance = self.config.NameLabelMaxDistance or 90
+
+			if enabled and cam then
+				local maxDistanceSq = maxDistance * maxDistance
+				enabled = distSq(cam.CFrame.Position, agent.pos) <= maxDistanceSq
+			else
+				enabled = false
+			end
+
+			agent._labelEnabled = enabled
+			parts.Label.Enabled = enabled
+		else
+			parts.Label.Enabled = agent._labelEnabled == true
 		end
-		parts.Label.Enabled = enabled
-		if parts.LabelText then
-			parts.LabelText.Text = buildLabelText(agent, self.config)
+
+		-- only rewrite text if it actually changed
+		local labelText = agent._labelText or buildLabelText(agent, self.config)
+		agent._labelText = labelText
+
+		if parts.LabelText and parts.LabelText.Text ~= labelText then
+			parts.LabelText.Text = labelText
 		end
 	end
 end
