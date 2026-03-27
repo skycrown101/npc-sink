@@ -100,6 +100,8 @@ Config.NameLabelsAlwaysOnTop = true
 Config.NamePoolFirst = nil
 Config.NamePoolLast = nil
 
+Config.NameLabelRefreshInterval = 0.25
+
 -- Role-driven visual styling
 Config.RoleVisuals = {
 	Guard = {
