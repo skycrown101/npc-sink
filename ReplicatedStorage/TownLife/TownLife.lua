@@ -20,16 +20,16 @@ local function distSq(a, b)
 end
 
 -- keeps list sorted by d2 asc, max size K
-local function topKInsert(list, agent, d2, K)
+local function topKInsert(list, item, d2, K)
 	local n = #list
 	if n < K then
-		list[n + 1] = { agent = agent, d2 = d2 }
+		list[n + 1] = { item = item, d2 = d2 }
 	else
 		-- if not better than worst then skip
 		if d2 >= list[n].d2 then
 			return
 		end
-		list[n] = { agent = agent, d2 = d2 }
+		list[n] = { item = item, d2 = d2 }
 	end
 
 	-- bubble up last element to keep sorted
@@ -40,7 +40,7 @@ local function topKInsert(list, agent, d2, K)
 	end
 end
 
--- wolrd helpers
+-- world helpers
 local function getOrCreateRoot()
 	local root = workspace:FindFirstChild("__TownLife")
 	if not root then
@@ -216,8 +216,8 @@ local function buildTown(townId, raw)
 			table.insert(patrolNodes, i)
 		end
 	end
-	
-	-- Guard posts are hotspots with Type="GuardPost"
+
+	-- Guard posts are hotspots with Type = "GuardPost"
 	local guardPosts = {}
 	for i, hs in ipairs(hotspots) do
 		if hs.type == "GuardPost" then
@@ -248,14 +248,11 @@ local function buildTown(townId, raw)
 		rng = Random.new(math.random(1, 2 ^ 30)),
 
 		-- perf runtime
-		_visTimer = 1e9,
 		_visibleIds = {},
 		_visibleList = {},
-		_farRR = 0,
 
 		patrolNodes = patrolNodes,
 		guardPosts = guardPosts,
-		
 	}
 end
 
@@ -289,6 +286,7 @@ function TownLife.Start()
 	-- spawn agent data
 	local nextAgentId = 1
 	local nowSpawn = os.clock()
+	local allAgents = {} -- { { town = town, agent = agent }, ... }
 
 	for _, town in ipairs(towns) do
 		town._agentById = {}
@@ -313,14 +311,16 @@ function TownLife.Start()
 
 			table.insert(town.agents, agent)
 			town._agentById[agent.id] = agent
+			table.insert(allAgents, {
+				town = town,
+				agent = agent,
+			})
+
 			nextAgentId += 1
 		end
 
-		-- per-town runtime fields
-		town._visTimer = 1e9
 		town._visibleIds = {}
 		town._visibleList = {}
-		town._farRR = 0
 	end
 
 	-- Disconnect any previous loop
@@ -333,6 +333,9 @@ function TownLife.Start()
 	local nearTick = 1 / Config.SimHzNear
 	local farTick = 1 / Config.SimHzFar
 
+	local visTimer = 1e9
+	local farRR = 0
+
 	TownLife._conn = RunService.RenderStepped:Connect(function(dt)
 		if not TownLife._running then
 			return
@@ -340,95 +343,122 @@ function TownLife.Start()
 
 		accumNear += dt
 		accumFar += dt
+		visTimer += dt
 
 		local now = os.clock()
 		local doNear = accumNear >= nearTick
 		local doFar = accumFar >= farTick
+		local refreshEvery = Config.VisibilityRefreshInterval or 0.25
+		local doVisibilityRefresh = visTimer >= refreshEvery
+
 		if doNear then
 			accumNear -= nearTick
 		end
 		if doFar then
 			accumFar -= farTick
 		end
+		if doVisibilityRefresh then
+			visTimer = 0
+		end
 
 		local focusPos = getFocusPos()
 		local visR2 = Config.VisibleDistance * Config.VisibleDistance
-		local refreshEvery = Config.VisibilityRefreshInterval or 0.25
 
-		for _, town in ipairs(towns) do
-			-- Meetups/events
-			if doNear then
+		-- update town events first
+		if doNear then
+			for _, town in ipairs(towns) do
 				EventSim.updateTown(town, Config, now, focusPos)
 			end
+		end
 
-			-- rate limtied refresh
-			town._visTimer = (town._visTimer or 0) + dt
+		-- global visibility refresh:
+		-- choose ONE top-K across all towns, not K per town
+		if doVisibilityRefresh then
+			local globalTop = {}
+			local K = Config.MaxVisibleNPCs or 20
 
-			if town._visTimer >= refreshEvery or not town._visibleIds then
-				town._visTimer = 0
-
-				local K = Config.MaxVisibleNPCs
-				local top = {}
-
-				-- scan agents once w/ d2d keep top K only
+			for _, town in ipairs(towns) do
 				for _, agent in ipairs(town.agents) do
 					if agent.state ~= "Despawned" then
 						local d2 = distSq(agent.pos, focusPos)
 						agent._d2 = d2
+
 						if d2 <= visR2 then
-							topKInsert(top, agent, d2, K)
+							topKInsert(globalTop, {
+								town = town,
+								agent = agent,
+							}, d2, K)
 						end
 					else
 						agent._d2 = math.huge
 					end
 				end
+			end
 
-				-- build viisble set for the town
-				local visibleIds = {}
-				for i = 1, #top do
-					visibleIds[top[i].agent.id] = true
-				end
+			local nextVisibleByTown = {}
+			for _, town in ipairs(towns) do
+				nextVisibleByTown[town] = {
+					ids = {},
+					list = {},
+				}
+			end
 
-				town._visibleIds = visibleIds
-				town._visibleList = top
+			for i = 1, #globalTop do
+				local payload = globalTop[i].item
+				local town = payload.town
+				local agent = payload.agent
+				local bucket = nextVisibleByTown[town]
 
-		
-				-- (collect first so we don't mutate renderer.active while iterating it)
-				local toRelease = nil
-				
-				for agentId in pairs(renderer.active) do
-					if town._agentById[agentId] and not visibleIds[agentId] then
-						toRelease = toRelease or {}
-						table.insert(toRelease, agentId)
-					end
-				end
-				
-				if toRelease then
-					for _, agentId in ipairs(toRelease) do
+				bucket.ids[agent.id] = true
+				bucket.list[#bucket.list + 1] = {
+					agent = agent,
+					d2 = globalTop[i].d2,
+				}
+			end
+
+			for _, town in ipairs(towns) do
+				local bucket = nextVisibleByTown[town]
+				local newVisibleIds = bucket.ids
+				local newVisibleList = bucket.list
+				local oldVisibleIds = town._visibleIds or {}
+
+				-- release only agents that were visible in this town before,
+				-- but are no longer visible now
+				for agentId in pairs(oldVisibleIds) do
+					if not newVisibleIds[agentId] then
 						renderer:releaseAgent(agentId)
 					end
 				end
 
-				-- models for only visible agents
-				for i = 1, #top do
-					renderer:getModelForAgent(top[i].agent)
+				town._visibleIds = newVisibleIds
+				town._visibleList = newVisibleList
+
+				-- ensure models exist only for newly visible/global-top agents
+				for i = 1, #newVisibleList do
+					renderer:getModelForAgent(newVisibleList[i].agent)
 				end
-			else
-				-- update d2 visible
+			end
+		else
+			-- no full refresh: only update d2 for currently visible agents
+			for _, town in ipairs(towns) do
 				if town._visibleList then
 					for i = 1, #town._visibleList do
 						local agent = town._visibleList[i].agent
 						agent._d2 = distSq(agent.pos, focusPos)
+						town._visibleList[i].d2 = agent._d2
 					end
 				end
 			end
+		end
 
+		-- dialogue, near sim, and visuals
+		for _, town in ipairs(towns) do
 			-- contextual dialogue
 			if doNear then
 				Dialogue.StepTown(town, Config, renderer, now)
 			end
 
-			-- step visibleagents only (near)
+			-- near sim for only visible agents
 			if doNear and town._visibleList then
 				for i = 1, #town._visibleList do
 					local agent = town._visibleList[i].agent
@@ -438,7 +468,7 @@ function TownLife.Start()
 				end
 			end
 
-			--VISUAL UPDATE
+			-- visual update
 			if town._visibleList then
 				for i = 1, #town._visibleList do
 					local agent = town._visibleList[i].agent
@@ -449,19 +479,23 @@ function TownLife.Start()
 					end
 				end
 			end
+		end
 
-			-- udgeted round-robin (far)
-			if doFar then
-				local budget = Config.FarSimBudgetPerTick or 40
-				local n = #town.agents
-				if n > 0 then
-					for _ = 1, budget do
-						town._farRR = (town._farRR % n) + 1
-						local agent = town.agents[town._farRR]
+		-- global far-sim budget:
+		-- consume the budget once total, not once per town
+		if doFar then
+			local budget = Config.FarSimBudgetPerTick or 40
+			local n = #allAgents
 
-						if agent.state ~= "Despawned" and not (town._visibleIds and town._visibleIds[agent.id]) then
-							AgentSim.stepAgent(agent, town, Config, town.rng, farTick, now, false)
-						end
+			if n > 0 then
+				for _ = 1, budget do
+					farRR = (farRR % n) + 1
+					local entry = allAgents[farRR]
+					local town = entry.town
+					local agent = entry.agent
+
+					if agent.state ~= "Despawned" and not (town._visibleIds and town._visibleIds[agent.id]) then
+						AgentSim.stepAgent(agent, town, Config, town.rng, farTick, now, false)
 					end
 				end
 			end
