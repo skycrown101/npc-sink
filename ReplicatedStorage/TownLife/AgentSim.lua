@@ -6,6 +6,54 @@ local function randRange(rng, a, b)
 	return a + (b - a) * rng:NextNumber()
 end
 
+local Lighting = game:GetService("Lighting")
+
+local function randomIndexFromList(list, rng)
+	if not list or #list == 0 then return nil end
+	return list[rng:NextInteger(1, #list)]
+end
+
+local function getPoiIndexesByType(town, poiType)
+	local out = {}
+	for i, poi in ipairs(town.pois) do
+		if poi.type == poiType then
+			table.insert(out, i)
+		end
+	end
+	return out
+end
+
+local function getHotspotIndexesByType(town, hotspotType)
+	local out = {}
+	for i, hs in ipairs(town.hotspots) do
+		if hs.type == hotspotType then
+			table.insert(out, i)
+		end
+	end
+	return out
+end
+
+local function getPatrolNodeIndexes(town)
+	return town.patrolNodes or {}
+end
+
+local function currentScheduleMode(agent, config)
+	local hour = Lighting.ClockTime
+	local rows = config.ScheduleByRole and config.ScheduleByRole[agent.role]
+	if not rows then
+		return nil
+	end
+
+	for _, row in ipairs(rows) do
+		local startHour, endHour, mode = row[1], row[2], row[3]
+		if hour >= startHour and hour < endHour then
+			return mode
+		end
+	end
+
+	return nil
+end
+
 local function weightedPickGateIndex(gates, rng)
 	if not gates or #gates == 0 then return nil end
 	local total = 0
