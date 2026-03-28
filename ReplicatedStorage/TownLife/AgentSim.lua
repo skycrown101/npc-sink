@@ -6,6 +6,144 @@ local function randRange(rng, a, b)
 	return a + (b - a) * rng:NextNumber()
 end
 
+local Lighting = game:GetService("Lighting")
+
+local function randomIndexFromList(list, rng)
+	if not list or #list == 0 then return nil end
+	return list[rng:NextInteger(1, #list)]
+end
+
+local function setTargetToPOI(agent, town, poiIndex)
+	if not poiIndex or not town.pois[poiIndex] then return false end
+	agent.targetType = "POI"
+	agent.targetIndex = poiIndex
+	agent.targetPos = town.pois[poiIndex].pos
+	return true
+end
+
+local function setTargetToHotspot(agent, town, hotspotIndex)
+	if not hotspotIndex or not town.hotspots[hotspotIndex] then return false end
+	agent.targetType = "POI"
+	agent.targetIndex = nil
+	agent.targetPos = town.hotspots[hotspotIndex].pos
+	return true
+end
+
+local function setTargetToPatrol(agent, town, rng)
+	local patrol = getPatrolNodeIndexes(town)
+	if not patrol or #patrol == 0 then return false end
+	local ni = patrol[rng:NextInteger(1, #patrol)]
+	agent.targetType = "Node"
+	agent.targetIndex = ni
+	agent.targetPos = town.graph.nodes[ni].pos
+	return true
+end
+
+local function pickScheduledTarget(agent, town, config, rng, now)
+	local mode = currentScheduleMode(agent, config)
+	agent.lastScheduleMode = mode
+
+	if mode == "Home" then
+		if setTargetToPOI(agent, town, agent.homePoiIndex) then return true end
+	elseif mode == "Work" then
+		if setTargetToPOI(agent, town, agent.workPoiIndex) then return true end
+	elseif mode == "Market" then
+		local markets = getPoiIndexesByType(town, "Market")
+		if setTargetToPOI(agent, town, randomIndexFromList(markets, rng)) then return true end
+	elseif mode == "Hotspot" then
+		if setTargetToHotspot(agent, town, agent.favoriteHotspotIndex) then return true end
+	elseif mode == "GuardPost" then
+		if setTargetToHotspot(agent, town, agent.favoriteHotspotIndex) then return true end
+	elseif mode == "Patrol" then
+		if setTargetToPatrol(agent, town, rng) then return true end
+	end
+
+	return false
+end
+
+function AgentSim.stepNeeds(agent, config, dt)
+	if not config.NeedsEnabled then return end
+
+	local dpm = config.NeedDecayPerMinute
+	if not dpm then return end
+
+	agent.needs.Hunger = math.max(0, agent.needs.Hunger - (dpm.Hunger or 0) * (dt / 60))
+	agent.needs.Energy = math.max(0, agent.needs.Energy - (dpm.Energy or 0) * (dt / 60))
+	agent.needs.Social = math.max(0, agent.needs.Social - (dpm.Social or 0) * (dt / 60))
+end
+
+function AgentSim.assignAnchors(agent, town, config, rng)
+	local homes = getPoiIndexesByType(town, "Home")
+	local works = getPoiIndexesByType(town, "Work")
+	local guardPosts = getHotspotIndexesByType(town, "GuardPost")
+	local socials = {}
+
+	for i, hs in ipairs(town.hotspots) do
+		if hs.type == "Tavern" or hs.type == "Fountain" or hs.type == "Market" then
+			table.insert(socials, i)
+		end
+	end
+
+	agent.homePoiIndex = randomIndexFromList(homes, rng)
+
+	if agent.role == "Worker" then
+		agent.workPoiIndex = randomIndexFromList(works, rng)
+	end
+
+	if agent.role == "Guard" then
+		agent.favoriteHotspotIndex = randomIndexFromList(guardPosts, rng)
+	else
+		agent.favoriteHotspotIndex = randomIndexFromList(socials, rng)
+	end
+
+	if config.NeedsEnabled then
+		agent.needs.Hunger = rng:NextInteger(55, 90)
+		agent.needs.Energy = rng:NextInteger(55, 90)
+		agent.needs.Social = rng:NextInteger(45, 85)
+	end
+end
+
+local function getPoiIndexesByType(town, poiType)
+	local out = {}
+	for i, poi in ipairs(town.pois) do
+		if poi.type == poiType then
+			table.insert(out, i)
+		end
+	end
+	return out
+end
+
+local function getHotspotIndexesByType(town, hotspotType)
+	local out = {}
+	for i, hs in ipairs(town.hotspots) do
+		if hs.type == hotspotType then
+			table.insert(out, i)
+		end
+	end
+	return out
+end
+
+local function getPatrolNodeIndexes(town)
+	return town.patrolNodes or {}
+end
+
+local function currentScheduleMode(agent, config)
+	local hour = Lighting.ClockTime
+	local rows = config.ScheduleByRole and config.ScheduleByRole[agent.role]
+	if not rows then
+		return nil
+	end
+
+	for _, row in ipairs(rows) do
+		local startHour, endHour, mode = row[1], row[2], row[3]
+		if hour >= startHour and hour < endHour then
+			return mode
+		end
+	end
+
+	return nil
+end
+
 local function weightedPickGateIndex(gates, rng)
 	if not gates or #gates == 0 then return nil end
 	local total = 0
@@ -61,6 +199,20 @@ function AgentSim.newAgent(id, townId, startNodeIndex, startPos, rng)
 		role = "Shopper",
 		displayName = nil,
 
+		-- schedule anchors
+		homePoiIndex = nil,
+		workPoiIndex = nil,
+		favoriteHotspotIndex = nil,
+		lastScheduleMode = nil,
+		nextScheduleCheckAt = 0,
+
+		-- needs
+		needs = {
+			Hunger = 70,
+			Energy = 80,
+			Social = 65,
+		},
+
 		-- simulation state
 		state = "Walk", -- Walk | Idle | SpawnIn | LeaveToGate | Despawned | MeetupGo | MeetupIdle
 		nodeIndex = startNodeIndex,
@@ -109,6 +261,12 @@ end
 
 local function pickTarget(agent, town, config, rng, now)
 	local role = agent.role or "Shopper"
+
+		if config.ScheduleEnabled then
+		if pickScheduledTarget(agent, town, config, rng, now) then
+			return
+		end
+	end
 
 	-- Guards have their own target logic
 	if role == "Guard" then
@@ -190,6 +348,8 @@ function AgentSim.stepAgent(agent, town, config, rng, dt, now, isNear)
 		speed *= 0.9
 	end
 
+	AgentSim.stepNeeds(agent, config, dt)
+	
 	-- If it's time to leave (but don't interrupt meetups)
 	if agent.state ~= "MeetupGo" and agent.state ~= "MeetupIdle" and now >= (agent.leavingAt or math.huge) then
 		if agent.homeGateIndex and town.spawnGates and town.spawnGates[agent.homeGateIndex] then

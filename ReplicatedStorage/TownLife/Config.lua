@@ -123,4 +123,63 @@ Config.RoleVisuals = {
 	},
 }
 
+-- roles
+Config.RoleWeights = {
+	{"Guard", 0.18},
+	{"Worker", 0.52},
+	{"Shopper", 0.30},
+}
+
+Config.GuardPatrolChance = 0.72
+Config.GuardGuardPostChance = 0.22
+Config.GuardPOIVisitChance = 0.06
+Config.GuardPostIdleMultiplier = 1.35
+
+-- schedules
+Config.ScheduleEnabled = true
+Config.ScheduleCheckInterval = 3.0
+
+Config.ScheduleByRole = {
+	Guard = {
+		{0, 6, "GuardPost"},
+		{6, 12, "Patrol"},
+		{12, 18, "GuardPost"},
+		{18, 24, "Patrol"},
+	},
+
+	Worker = {
+		{0, 7, "Home"},
+		{7, 17, "Work"},
+		{17, 20, "Market"},
+		{20, 24, "Home"},
+	},
+
+	Shopper = {
+		{0, 8, "Home"},
+		{8, 18, "Market"},
+		{18, 22, "Hotspot"},
+		{22, 24, "Home"},
+	},
+}
+
+-- simple needs
+Config.NeedsEnabled = true
+Config.NeedDecayPerMinute = {
+	Hunger = 7,
+	Energy = 5,
+	Social = 6,
+}
+
+Config.NeedThresholds = {
+	Hunger = 35,
+	Energy = 30,
+	Social = 32,
+}
+
+Config.NeedTargetTypes = {
+	Hunger = "Market",
+	Energy = "Home",
+	Social = "Hotspot",
+}
+
 return Config
