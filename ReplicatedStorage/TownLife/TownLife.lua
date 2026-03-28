@@ -294,6 +294,14 @@ function TownLife.Start()
 		for _ = 1, town.popCap do
 			-- create agent
 			local agent = AgentSim.newAgent(nextAgentId, town.id, 1, Vector3.zero, town.rng)
+			if AgentSim.assignRole then
+				AgentSim.assignRole(agent, town, Config, town.rng)
+			end
+			
+			if AgentSim.assignAnchors then
+				AgentSim.assignAnchors(agent, town, Config, town.rng)
+			end
+			
 			AgentSim.assignRole(agent, town, Config, town.rng)
 
 			-- spawn gates
