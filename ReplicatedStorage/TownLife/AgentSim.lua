@@ -13,6 +13,17 @@ local function randomIndexFromList(list, rng)
 	return list[rng:NextInteger(1, #list)]
 end
 
+function AgentSim.stepNeeds(agent, config, dt)
+	if not config.NeedsEnabled then return end
+
+	local dpm = config.NeedDecayPerMinute
+	if not dpm then return end
+
+	agent.needs.Hunger = math.max(0, agent.needs.Hunger - (dpm.Hunger or 0) * (dt / 60))
+	agent.needs.Energy = math.max(0, agent.needs.Energy - (dpm.Energy or 0) * (dt / 60))
+	agent.needs.Social = math.max(0, agent.needs.Social - (dpm.Social or 0) * (dt / 60))
+end
+
 function AgentSim.assignAnchors(agent, town, config, rng)
 	local homes = getPoiIndexesByType(town, "Home")
 	local works = getPoiIndexesByType(town, "Work")
