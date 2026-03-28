@@ -266,6 +266,12 @@ end
 local function pickTarget(agent, town, config, rng, now)
 	local role = agent.role or "Shopper"
 
+		if config.ScheduleEnabled then
+		if pickScheduledTarget(agent, town, config, rng, now) then
+			return
+		end
+	end
+
 	-- Guards have their own target logic
 	if role == "Guard" then
 		if pickGuardTarget(agent, town, config, rng) then
