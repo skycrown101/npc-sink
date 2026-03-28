@@ -36,6 +36,37 @@ local PACKS = {
 		},
 		reactions = {"Yeah.", "No way.", "Huh.", "True.", "…maybe.", "If you say so."},
 	},
+		GuardPost = {
+		place = "the guard post",
+		lines = {
+			"Quiet shift so far.",
+			"Keep moving and keep your head down.",
+			"Report anything strange at once.",
+			"Been a long watch {when}.",
+		},
+		reactions = {
+			"Understood.",
+			"Right.",
+			"Noted.",
+			"Will do.",
+		},
+	},
+
+	Inn = {
+		place = "the inn",
+		lines = {
+			"Best meal in town is still here.",
+			"I needed this seat {when}.",
+			"Rooms are full again tonight.",
+			"Too many rumors in {place}.",
+		},
+		reactions = {
+			"True.",
+			"Exactly.",
+			"No argument there.",
+			"That tracks.",
+		},
+	},
 	Tavern = {
 		place = "the tavern",
 		lines = {
