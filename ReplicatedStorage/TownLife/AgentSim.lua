@@ -82,6 +82,24 @@ function AgentSim.newAgent(id, townId, startNodeIndex, startPos, rng)
 		homeGateIndex = nil,
 		leavingAt = 0,
 		respawnAt = 0,
+
+				-- role / identity
+		role = "Shopper",
+		displayName = nil,
+
+		-- schedule anchors
+		homePoiIndex = nil,
+		workPoiIndex = nil,
+		favoriteHotspotIndex = nil,
+		lastScheduleMode = nil,
+		nextScheduleCheckAt = 0,
+
+		-- needs
+		needs = {
+			Hunger = 70,
+			Energy = 80,
+			Social = 65,
+		},
 	}
 end
 
