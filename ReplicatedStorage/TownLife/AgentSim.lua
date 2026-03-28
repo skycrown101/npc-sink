@@ -13,6 +13,54 @@ local function randomIndexFromList(list, rng)
 	return list[rng:NextInteger(1, #list)]
 end
 
+local function setTargetToPOI(agent, town, poiIndex)
+	if not poiIndex or not town.pois[poiIndex] then return false end
+	agent.targetType = "POI"
+	agent.targetIndex = poiIndex
+	agent.targetPos = town.pois[poiIndex].pos
+	return true
+end
+
+local function setTargetToHotspot(agent, town, hotspotIndex)
+	if not hotspotIndex or not town.hotspots[hotspotIndex] then return false end
+	agent.targetType = "POI"
+	agent.targetIndex = nil
+	agent.targetPos = town.hotspots[hotspotIndex].pos
+	return true
+end
+
+local function setTargetToPatrol(agent, town, rng)
+	local patrol = getPatrolNodeIndexes(town)
+	if not patrol or #patrol == 0 then return false end
+	local ni = patrol[rng:NextInteger(1, #patrol)]
+	agent.targetType = "Node"
+	agent.targetIndex = ni
+	agent.targetPos = town.graph.nodes[ni].pos
+	return true
+end
+
+local function pickScheduledTarget(agent, town, config, rng, now)
+	local mode = currentScheduleMode(agent, config)
+	agent.lastScheduleMode = mode
+
+	if mode == "Home" then
+		if setTargetToPOI(agent, town, agent.homePoiIndex) then return true end
+	elseif mode == "Work" then
+		if setTargetToPOI(agent, town, agent.workPoiIndex) then return true end
+	elseif mode == "Market" then
+		local markets = getPoiIndexesByType(town, "Market")
+		if setTargetToPOI(agent, town, randomIndexFromList(markets, rng)) then return true end
+	elseif mode == "Hotspot" then
+		if setTargetToHotspot(agent, town, agent.favoriteHotspotIndex) then return true end
+	elseif mode == "GuardPost" then
+		if setTargetToHotspot(agent, town, agent.favoriteHotspotIndex) then return true end
+	elseif mode == "Patrol" then
+		if setTargetToPatrol(agent, town, rng) then return true end
+	end
+
+	return false
+end
+
 function AgentSim.stepNeeds(agent, config, dt)
 	if not config.NeedsEnabled then return end
 
