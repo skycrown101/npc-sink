@@ -13,6 +13,37 @@ local function randomIndexFromList(list, rng)
 	return list[rng:NextInteger(1, #list)]
 end
 
+function AgentSim.assignAnchors(agent, town, config, rng)
+	local homes = getPoiIndexesByType(town, "Home")
+	local works = getPoiIndexesByType(town, "Work")
+	local guardPosts = getHotspotIndexesByType(town, "GuardPost")
+	local socials = {}
+
+	for i, hs in ipairs(town.hotspots) do
+		if hs.type == "Tavern" or hs.type == "Fountain" or hs.type == "Market" then
+			table.insert(socials, i)
+		end
+	end
+
+	agent.homePoiIndex = randomIndexFromList(homes, rng)
+
+	if agent.role == "Worker" then
+		agent.workPoiIndex = randomIndexFromList(works, rng)
+	end
+
+	if agent.role == "Guard" then
+		agent.favoriteHotspotIndex = randomIndexFromList(guardPosts, rng)
+	else
+		agent.favoriteHotspotIndex = randomIndexFromList(socials, rng)
+	end
+
+	if config.NeedsEnabled then
+		agent.needs.Hunger = rng:NextInteger(55, 90)
+		agent.needs.Energy = rng:NextInteger(55, 90)
+		agent.needs.Social = rng:NextInteger(45, 85)
+	end
+end
+
 local function getPoiIndexesByType(town, poiType)
 	local out = {}
 	for i, poi in ipairs(town.pois) do
