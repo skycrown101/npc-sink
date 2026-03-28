@@ -352,6 +352,8 @@ function AgentSim.stepAgent(agent, town, config, rng, dt, now, isNear)
 		speed *= 0.9
 	end
 
+	AgentSim.stepNeeds(agent, config, dt)
+	
 	-- If it's time to leave (but don't interrupt meetups)
 	if agent.state ~= "MeetupGo" and agent.state ~= "MeetupIdle" and now >= (agent.leavingAt or math.huge) then
 		if agent.homeGateIndex and town.spawnGates and town.spawnGates[agent.homeGateIndex] then
