@@ -338,52 +338,36 @@ end
 
 local function pickTarget(agent, town, config, rng, now)
 	local role = agent.role or "Shopper"
+	agent.needFocus = nil
 
-		if config.ScheduleEnabled then
+	if pickNeedTarget(agent, town, config, rng) then
+		return
+	end
+
+	if config.ScheduleEnabled then
 		if pickScheduledTarget(agent, town, config, rng, now) then
 			return
 		end
 	end
 
-	-- Guards have their own target logic
-	if role == "Guard" then
-		if pickGuardTarget(agent, town, config, rng) then
-			return
-		end
-
-		-- guards rarely go to POIs
-		local usePOI = (#town.pois > 0) and (rng:NextNumber() < (config.GuardPOIVisitChance or 0.08))
-		if usePOI then
-			local poiIndex = rng:NextInteger(1, #town.pois)
-			agent.targetType = "POI"
-			agent.targetIndex = poiIndex
-			agent.targetPos = town.pois[poiIndex].pos
-			return
-		end
-		-- else fall through to random road walking
+	if role == "Worker" then
+		if chance(rng, 0.60) and setTargetToPOI(agent, town, agent.workPoiIndex) then return end
+		if chance(rng, 0.18) and setTargetToPOI(agent, town, agent.homePoiIndex) then return end
+		if chance(rng, 0.14) and setTargetToPOI(agent, town, randomIndexFromList(getPoiIndexesByType(town, "Market"), rng)) then return end
+		if setTargetToHotspot(agent, town, agent.favoriteHotspotIndex) then return end
+	elseif role == "Guard" then
+		if chance(rng, 0.78) and setTargetToHotspot(agent, town, agent.favoriteHotspotIndex) then return end
+		if chance(rng, 0.12) and setTargetToPOI(agent, town, agent.homePoiIndex) then return end
+		if setTargetToPOI(agent, town, randomIndexFromList(getPoiIndexesByType(town, "Market"), rng)) then return end
+	else -- Shopper
+		if chance(rng, 0.55) and setTargetToPOI(agent, town, randomIndexFromList(getPoiIndexesByType(town, "Market"), rng)) then return end
+		if chance(rng, 0.22) and setTargetToHotspot(agent, town, agent.favoriteHotspotIndex) then return end
+		if chance(rng, 0.18) and setTargetToPOI(agent, town, agent.homePoiIndex) then return end
 	end
 
-	-- Default behavior (workers/shoppers/anyone else):
-	local usePOI = (#town.pois > 0) and (rng:NextNumber() < config.POIVisitChance)
-	if usePOI then
-		local poiIndex = rng:NextInteger(1, #town.pois)
-		agent.targetType = "POI"
-		agent.targetIndex = poiIndex
-		agent.targetPos = town.pois[poiIndex].pos
-	else
-		local nextNode = town.graph and town.graph.neighbors and town.graph.neighbors[agent.nodeIndex]
-		if nextNode and #nextNode > 0 then
-			local ni = nextNode[rng:NextInteger(1, #nextNode)]
-			agent.targetType = "Node"
-			agent.targetIndex = ni
-			agent.targetPos = town.graph.nodes[ni].pos
-		else
-			local ni = rng:NextInteger(1, #town.graph.nodes)
-			agent.targetType = "Node"
-			agent.targetIndex = ni
-			agent.targetPos = town.graph.nodes[ni].pos
-		end
-	end
+	if setTargetToHotspot(agent, town, agent.favoriteHotspotIndex) then return end
+	if setTargetToPOI(agent, town, agent.homePoiIndex) then return end
+	agent.target = nil
 end
 
 function AgentSim.initAtGate(agent, town, config, rng, now)
