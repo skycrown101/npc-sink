@@ -429,6 +429,7 @@ function AgentSim.stepAgent(agent, town, config, rng, dt, now, isNear)
 		if now >= (agent.respawnAt or 0) then
 			agent.appearanceSeed = rng:NextInteger(1, 2^30)
 			AgentSim.assignRole(agent, town, config, rng) -- new person can have new role + name
+			AgentSim.assignAnchors(agent, town, config, rng)
 			AgentSim.initAtGate(agent, town, config, rng, now)
 		end
 		return
