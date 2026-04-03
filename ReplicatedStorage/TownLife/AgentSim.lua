@@ -287,6 +287,7 @@ function AgentSim.newAgent(id, townId, startNodeIndex, startPos, rng)
 			Hunger = 70,
 			Energy = 80,
 			Social = 65,
+			needFocus = nil,
 		},
 
 		-- simulation state
