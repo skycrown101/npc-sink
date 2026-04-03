@@ -143,7 +143,83 @@ local function currentScheduleMode(agent, config)
 
 	return nil
 end
+local function getMostUrgentNeed(agent, config)
+	if not config.NeedsEnabled then return nil end
+	if not agent.needs or not config.NeedThresholds then return nil end
 
+	local bestNeed = nil
+	local bestScore = nil
+
+	for needName, threshold in pairs(config.NeedThresholds) do
+		local value = agent.needs[needName]
+		if typeof(threshold) == "number" and typeof(value) == "number" and value <= threshold then
+			local score = (threshold - value) / math.max(threshold, 1)
+			if bestScore == nil or score > bestScore then
+				bestNeed = needName
+				bestScore = score
+			end
+		end
+	end
+
+	return bestNeed
+end
+
+local function restoreNeed(agent, config, rng, needName)
+	if not agent.needs or not needName then return end
+
+	local lo, hi = 80, 100
+	local ranges = config.NeedRestoreRanges
+	local restore = ranges and ranges[needName]
+	if typeof(restore) == "table" then
+		lo = tonumber(restore[1]) or lo
+		hi = tonumber(restore[2]) or hi
+	end
+	if hi < lo then
+		hi = lo
+	end
+
+	agent.needs[needName] = math.clamp(math.floor(randRange(rng, lo, hi) + 0.5), 0, 100)
+end
+
+local function setTargetToNeed(agent, town, config, rng, needName)
+	local targetType = config.NeedTargetTypes and config.NeedTargetTypes[needName]
+	if typeof(targetType) ~= "string" or targetType == "" then
+		return false
+	end
+
+	local ok = false
+	if targetType == "Home" then
+		ok = setTargetToPOI(agent, town, agent.homePoiIndex)
+	elseif targetType == "Work" then
+		ok = setTargetToPOI(agent, town, agent.workPoiIndex)
+	elseif targetType == "Hotspot" or targetType == "GuardPost" then
+		ok = setTargetToHotspot(agent, town, agent.favoriteHotspotIndex)
+	end
+
+	if not ok then
+		ok = setTargetToPOI(agent, town, randomIndexFromList(getPoiIndexesByType(town, targetType), rng))
+	end
+
+	if not ok then
+		ok = setTargetToHotspot(agent, town, randomIndexFromList(getHotspotIndexesByType(town, targetType), rng))
+	end
+
+	if ok then
+		agent.needFocus = needName
+		return true
+	end
+
+	return false
+end
+
+local function pickNeedTarget(agent, town, config, rng)
+	local needName = getMostUrgentNeed(agent, config)
+	if not needName then
+		return false
+	end
+
+	return setTargetToNeed(agent, town, config, rng, needName)
+end
 local function weightedPickGateIndex(gates, rng)
 	if not gates or #gates == 0 then return nil end
 	local total = 0
@@ -211,6 +287,7 @@ function AgentSim.newAgent(id, townId, startNodeIndex, startPos, rng)
 			Hunger = 70,
 			Energy = 80,
 			Social = 65,
+			needFocus = nil,
 		},
 
 		-- simulation state
@@ -261,52 +338,36 @@ end
 
 local function pickTarget(agent, town, config, rng, now)
 	local role = agent.role or "Shopper"
+	agent.needFocus = nil
 
-		if config.ScheduleEnabled then
+	if pickNeedTarget(agent, town, config, rng) then
+		return
+	end
+
+	if config.ScheduleEnabled then
 		if pickScheduledTarget(agent, town, config, rng, now) then
 			return
 		end
 	end
 
-	-- Guards have their own target logic
-	if role == "Guard" then
-		if pickGuardTarget(agent, town, config, rng) then
-			return
-		end
-
-		-- guards rarely go to POIs
-		local usePOI = (#town.pois > 0) and (rng:NextNumber() < (config.GuardPOIVisitChance or 0.08))
-		if usePOI then
-			local poiIndex = rng:NextInteger(1, #town.pois)
-			agent.targetType = "POI"
-			agent.targetIndex = poiIndex
-			agent.targetPos = town.pois[poiIndex].pos
-			return
-		end
-		-- else fall through to random road walking
+	if role == "Worker" then
+		if chance(rng, 0.60) and setTargetToPOI(agent, town, agent.workPoiIndex) then return end
+		if chance(rng, 0.18) and setTargetToPOI(agent, town, agent.homePoiIndex) then return end
+		if chance(rng, 0.14) and setTargetToPOI(agent, town, randomIndexFromList(getPoiIndexesByType(town, "Market"), rng)) then return end
+		if setTargetToHotspot(agent, town, agent.favoriteHotspotIndex) then return end
+	elseif role == "Guard" then
+		if chance(rng, 0.78) and setTargetToHotspot(agent, town, agent.favoriteHotspotIndex) then return end
+		if chance(rng, 0.12) and setTargetToPOI(agent, town, agent.homePoiIndex) then return end
+		if setTargetToPOI(agent, town, randomIndexFromList(getPoiIndexesByType(town, "Market"), rng)) then return end
+	else -- Shopper
+		if chance(rng, 0.55) and setTargetToPOI(agent, town, randomIndexFromList(getPoiIndexesByType(town, "Market"), rng)) then return end
+		if chance(rng, 0.22) and setTargetToHotspot(agent, town, agent.favoriteHotspotIndex) then return end
+		if chance(rng, 0.18) and setTargetToPOI(agent, town, agent.homePoiIndex) then return end
 	end
 
-	-- Default behavior (workers/shoppers/anyone else):
-	local usePOI = (#town.pois > 0) and (rng:NextNumber() < config.POIVisitChance)
-	if usePOI then
-		local poiIndex = rng:NextInteger(1, #town.pois)
-		agent.targetType = "POI"
-		agent.targetIndex = poiIndex
-		agent.targetPos = town.pois[poiIndex].pos
-	else
-		local nextNode = town.graph and town.graph.neighbors and town.graph.neighbors[agent.nodeIndex]
-		if nextNode and #nextNode > 0 then
-			local ni = nextNode[rng:NextInteger(1, #nextNode)]
-			agent.targetType = "Node"
-			agent.targetIndex = ni
-			agent.targetPos = town.graph.nodes[ni].pos
-		else
-			local ni = rng:NextInteger(1, #town.graph.nodes)
-			agent.targetType = "Node"
-			agent.targetIndex = ni
-			agent.targetPos = town.graph.nodes[ni].pos
-		end
-	end
+	if setTargetToHotspot(agent, town, agent.favoriteHotspotIndex) then return end
+	if setTargetToPOI(agent, town, agent.homePoiIndex) then return end
+	agent.target = nil
 end
 
 function AgentSim.initAtGate(agent, town, config, rng, now)
@@ -368,6 +429,7 @@ function AgentSim.stepAgent(agent, town, config, rng, dt, now, isNear)
 		if now >= (agent.respawnAt or 0) then
 			agent.appearanceSeed = rng:NextInteger(1, 2^30)
 			AgentSim.assignRole(agent, town, config, rng) -- new person can have new role + name
+			AgentSim.assignAnchors(agent, town, config, rng)
 			AgentSim.initAtGate(agent, town, config, rng, now)
 		end
 		return
@@ -470,7 +532,10 @@ function AgentSim.stepAgent(agent, town, config, rng, dt, now, isNear)
 		elseif agent.targetType == "GuardPost" then
 			idle *= (config.GuardPostIdleMultiplier or 1.2)
 		end
-
+		if agent.needFocus then
+			restoreNeed(agent, config, rng, agent.needFocus)
+			agent.needFocus = nil
+		end
 		agent.state = "Idle"
 		agent.idleUntil = now + idle
 		return

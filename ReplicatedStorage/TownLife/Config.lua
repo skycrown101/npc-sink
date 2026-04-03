@@ -181,5 +181,9 @@ Config.NeedTargetTypes = {
 	Energy = "Home",
 	Social = "Hotspot",
 }
-
+Config.NeedRestoreRanges = {
+	Hunger = {80, 100},
+	Energy = {88, 100},
+	Social = {78, 100},
+}
 return Config
