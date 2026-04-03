@@ -532,7 +532,10 @@ function AgentSim.stepAgent(agent, town, config, rng, dt, now, isNear)
 		elseif agent.targetType == "GuardPost" then
 			idle *= (config.GuardPostIdleMultiplier or 1.2)
 		end
-
+		if agent.needFocus then
+			restoreNeed(agent, config, rng, agent.needFocus)
+			agent.needFocus = nil
+		end
 		agent.state = "Idle"
 		agent.idleUntil = now + idle
 		return
