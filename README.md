@@ -1,4 +1,6 @@
-# npc-sink (TownLife)
+# Notice: We decided to stop working on npc sink. no more future updates
+
+## npc-sink (TownLife)
 
 Lightweight client-side “town life” NPC simulation for Roblox.
 
